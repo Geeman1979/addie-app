@@ -1,0 +1,260 @@
+{% extends "base.html" %}
+{% block content %}
+<h4 style="color:var(--navy); font-weight:700;"><i class="bi bi-graph-up-arrow"></i> Analytics & Insights</h4>
+
+<!-- LEARNING STATISTICS OVERVIEW -->
+<div class="row g-3 mb-3">
+    <div class="col-md-12">
+        <div class="card"><div class="card-header d-flex justify-content-between"><span><i class="bi bi-clipboard-data"></i> Learning Statistics Overview — All Requests</span>
+                <div class="d-flex gap-1">
+                    <a href="{{ url_for('export_all_analytics', fmt='xlsx') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Excel</a>
+                    <a href="{{ url_for('export_all_analytics', fmt='csv') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> CSV</a>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-md-3"><div class="p-3 text-center" style="background:#E8F0F8;border-radius:8px;"><strong style="font-size:1.8rem;color:var(--accent);">{{ total_learners }}</strong><div style="font-size:0.8rem;color:#999;">Total Learning Records</div></div></div>
+                    <div class="col-md-3"><div class="p-3 text-center" style="background:#E8F5E9;border-radius:8px;"><strong style="font-size:1.8rem;color:var(--green);">{{ avg_completion }}%</strong><div style="font-size:0.8rem;color:#999;">Avg Completion %</div></div></div>
+                    <div class="col-md-3"><div class="p-3 text-center" style="background:#FDF2E0;border-radius:8px;"><strong style="font-size:1.8rem;color:var(--gold);">{{ avg_score_all }}%</strong><div style="font-size:0.8rem;color:#999;">Avg Score</div></div></div>
+                    <div class="col-md-3"><div class="p-3 text-center" style="background:#D4E6F1;border-radius:8px;"><strong style="font-size:1.8rem;color:var(--teal);">{{ pass_rate }}%</strong><div style="font-size:0.8rem;color:#999;">Pass Rate</div></div></div>
+                </div>
+                {% if requests_with_stats %}
+                <table class="table table-sm mt-3" style="font-size:0.85rem;">
+                    <thead><tr><th>Request / Intervention</th><th>Learners</th><th>Avg Completion</th><th>Avg Score</th><th>Pass Rate</th><th></th></tr></thead>
+                    <tbody>
+                        {% for r in requests_with_stats %}
+                        <tr>
+                            <td><a href="{{ url_for('request_detail', req_id=r.id) }}">{{ r.title }}</a></td>
+                            <td>{{ r.count }}</td>
+                            <td><span class="phase-badge" style="background:{% if r.avg_pct>=75 %}#E8F5E9;color:#1E8445{% elif r.avg_pct>=25 %}#FDEBD0;color:#CC7A29{% else %}#FDEDEC;color:var(--red){% endif %};">{{ r.avg_pct }}%</span></td>
+                            <td><span class="phase-badge" style="background:{% if r.avg_score>=75 %}#E8F5E9;color:#1E8445{% elif r.avg_score>=50 %}#FDEBD0;color:#CC7A29{% else %}#FDEDEC;color:var(--red){% endif %};">{{ r.avg_score }}%</span></td>
+                            <td>{{ r.pass_rate }}%</td>
+                            <td><a href="{{ url_for('request_detail', req_id=r.id) }}#stats" class="btn btn-outline-primary btn-sm">View</a>
+                                <a href="{{ url_for('request_analytics', req_id=r.id) }}" class="btn btn-outline-info btn-sm"><i class="bi bi-graph-up"></i> Analytics</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="font-size:0.85rem;color:#999;margin-top:8px;">No learning statistics uploaded yet. Go to a request detail page and upload a CSV.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mt-2">
+    <!-- PHASE DISTRIBUTION -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-diagram-3"></i> Requests by Phase</div>
+            <div class="card-body">
+                {% set phase_colors = {'inbox':'#6c757d','analysis':'var(--accent)','design':'var(--teal)','development':'var(--gold)','implementation':'var(--green)','evaluation':'#6F42C1','completed':'#1E8445'} %}
+                {% for phase, count in by_phase %}
+                <div class="d-flex align-items-center mb-2">
+                    <span style="width:120px; font-size:0.8rem;">{{ phase|capitalize }}</span>
+                    <div class="flex-grow-1 mx-2">
+                        <div class="progress progress-thin">
+                            <div class="progress-bar" style="width:{% if total > 0 %}{{ count/total*100 }}%{% endif %}; background:{{ phase_colors.get(phase,'#999') }};"></div>
+                        </div>
+                    </div>
+                    <span style="font-weight:600; font-size:0.85rem; width:40px; text-align:right;">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- PRIORITY DISTRIBUTION -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-exclamation-triangle"></i> Requests by Priority</div>
+            <div class="card-body">
+                {% set pri_colors = {'Critical':'#C0392B','High':'#E69E2E','Medium':'#2E86AB','Low':'#999','Backlog':'#ccc'} %}
+                {% for priority, count in by_priority %}
+                <div class="d-flex align-items-center mb-2">
+                    <span style="width:80px; font-size:0.8rem;">{{ priority }}</span>
+                    <div class="flex-grow-1 mx-2">
+                        <div class="progress progress-thin">
+                            <div class="progress-bar" style="width:{% if total > 0 %}{{ count/total*100 }}%{% endif %}; background:{{ pri_colors.get(priority,'#999') }};"></div>
+                        </div>
+                    </div>
+                    <span style="font-weight:600; font-size:0.85rem;">{{ count }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- AVERAGE PHASE DURATION -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-clock"></i> Average Time per Phase (days)</div>
+            <div class="card-body">
+                {% if avg_phase_days %}
+                {% set phase_order = ['analysis','design','development','implementation','evaluation'] %}
+                {% for p in phase_order %}
+                {% if p in avg_phase_days %}
+                <div class="d-flex align-items-center mb-2">
+                    <span style="width:130px; font-size:0.8rem;">{{ p|capitalize }}</span>
+                    <div class="flex-grow-1 mx-2">
+                        <div class="progress progress-thin">
+                            <div class="progress-bar" style="width:{{ avg_phase_days[p] * 5 }}%; background:{{ phase_colors.get(p,'#999') }};"></div>
+                        </div>
+                    </div>
+                    <span style="font-weight:600; font-size:0.85rem;">{{ avg_phase_days[p] }} days</span>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% else %}
+                <p style="font-size:0.85rem; color:#999;">No completed phases yet. Times will populate as phases complete.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- KIRKPATRICK SCORES -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> Kirkpatrick — Projected vs Actual</div>
+            <div class="card-body">
+                <div class="row g-2">
+                    {% set kcols = {'l1': {'label':'L1 — Reaction','color':'var(--accent)'},
+                                     'l2': {'label':'L2 — Learning','color':'var(--teal)'},
+                                     'l3': {'label':'L3 — Behaviour','color':'var(--gold)'},
+                                     'l4': {'label':'L4 — Results','color':'var(--green)'}} %}
+                    {% for level, info in kcols.items() %}
+                    <div class="col-md-3">
+                        <div class="p-2 text-center" style="background:#F8F9FA;border-radius:6px;height:100%;">
+                            <div style="font-size:0.75rem;font-weight:600;color:{{ info.color }};">{{ info.label }}</div>
+                            <div class="d-flex justify-content-center gap-3 mt-1">
+                                <div>
+                                    <div style="font-size:0.65rem;color:#999;">Projected</div>
+                                    <div style="font-weight:700;font-size:1.1rem;color:{{ info.color }};">
+                                        {{ projected_kirk[level] or '—' }}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div style="font-size:0.65rem;color:#999;">Actual</div>
+                                    <div style="font-weight:700;font-size:1.1rem;color:var(--navy);">
+                                        {% if actual_kirk[level] %}
+                                            {{ actual_kirk[level] }}
+                                            {% set p = projected_kirk[level] %}
+                                            {% set a = actual_kirk[level] %}
+                                            {% if p and a %}
+                                                {% set pnum = p|float %}
+                                                {% set anum = a|float %}
+                                                {% if anum > pnum %}
+                                                    <span style="color:var(--green);font-size:0.8rem;"><i class="bi bi-arrow-up-short"></i></span>
+                                                {% elif anum < pnum and anum > 0 %}
+                                                    <span style="color:var(--red);font-size:0.8rem;"><i class="bi bi-arrow-down-short"></i></span>
+                                                {% endif %}
+                                            {% endif %}
+                                        {% else %}
+                                            <span style="color:#ddd;">—</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="font-size:0.6rem;color:#ccc;margin-top:4px;">
+                                {% if level == 'l2' %}
+                                    Auto-calculated from uploaded learning stats
+                                {% else %}
+                                    Enter manually during intervention design
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ACTIVE BLOCKERS -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="color:var(--red);"><i class="bi bi-exclamation-triangle"></i> Active Blockers</div>
+            <div class="card-body p-0">
+                {% if blockers %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                        <thead><tr><th>Request</th><th>Phase</th><th>Blocker</th><th>Since</th></tr></thead>
+                        <tbody>
+                            {% for b in blockers %}
+                            <tr>
+                                <td><a href="{{ url_for('request_detail', req_id=b.id) }}">{{ b.title[:40] }}</a></td>
+                                <td><span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ b.phase|capitalize }}</span></td>
+                                <td style="color:var(--red); font-size:0.8rem;">{{ b.blocker[:60] }}</td>
+                                <td style="font-size:0.8rem; color:#999;">{{ b.since.strftime('%d %b') if b.since else '—' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3"><p style="font-size:0.85rem; color:#999; margin:0;">No active blockers</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ESCALATIONS -->
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header" style="color:var(--red);"><i class="bi bi-arrow-up-circle"></i> Escalated Requests</div>
+            <div class="card-body p-0">
+                {% if escalations %}
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0" style="font-size:0.85rem;">
+                        <thead><tr><th>Request</th><th>Level</th><th>Note</th><th>Priority</th></tr></thead>
+                        <tbody>
+                            {% for e in escalations %}
+                            <tr>
+                                <td><a href="{{ url_for('request_detail', req_id=e.id) }}">{{ e.title[:40] }}</a></td>
+                                <td><span class="phase-badge" style="background:#FDEDEC;color:var(--red);">L{{ e.escalation_level }}</span></td>
+                                <td style="font-size:0.8rem;">{{ e.escalation_note[:50] if e.escalation_note else '—' }}</td>
+                                <td><span class="phase-badge" style="background:{% if e.priority=='Critical' %}#FDEDEC;color:#C0392B{% else %}#FDEBD0;color:#CC7A29{% endif %};">{{ e.priority }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-3"><p style="font-size:0.85rem; color:#999; margin:0;">No escalations</p></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ROI TRACKING -->
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-currency-exchange"></i> ROI Tracking — Projected vs Actual</div>
+            <div class="card-body">
+                {% if roi_data %}
+                <div class="table-responsive">
+                    <table class="table table-sm" style="font-size:0.85rem;">
+                        <thead><tr><th>Request</th><th>Projected ROI</th><th>Actual ROI</th><th>Status</th><th>Variance</th></tr></thead>
+                        <tbody>
+                            {% for r in roi_data %}
+                            {% set variance = (r.actual_roi or 0) - (r.projected_roi or 0) %}
+                            <tr>
+                                <td><a href="{{ url_for('request_detail', req_id=r.id) }}">{{ r.title[:50] }}</a></td>
+                                <td>R{{ "%.0f"|format(r.projected_roi or 0) }}</td>
+                                <td>{% if r.actual_roi %}R{{ "%.0f"|format(r.actual_roi) }}{% else %}—{% endif %}</td>
+                                <td><span class="phase-badge" style="background:{% if variance >= 0 %}#E8F5E9;color:#1E8445{% else %}#FDEBD0;color:#CC7A29{% endif %};">{% if variance >= 0 %}On Track{% else %}Below{% endif %}</span></td>
+                                <td class="{% if variance >= 0 %}roi-positive{% else %}roi-negative{% endif %}">{% if variance != 0 %}{% if variance > 0 %}+{% endif %}R{{ "%.0f"|format(variance) }}{% else %}—{% endif %}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p style="font-size:0.85rem; color:#999;">No ROI data yet. Set projected ROI when creating requests and update actual ROI via L4 evaluation results.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

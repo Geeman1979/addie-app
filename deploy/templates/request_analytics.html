@@ -1,0 +1,75 @@
+{% extends "base.html" %}{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-graph-up"></i> Analytics: {{ req.title[:50] }}</h4>
+    <a href="{{ url_for('request_detail', req_id=req.id) }}" class="btn btn-outline-secondary btn-sm">← Back to Intervention</a>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <strong style="font-size:1.5rem;color:var(--accent);">{{ stats|length }}</strong>
+                <div style="font-size:0.8rem;color:#999;">Total Records</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <strong style="font-size:1.5rem;color:var(--green);">{{ req.avg_completion_pct() }}%</strong>
+                <div style="font-size:0.8rem;color:#999;">Avg Completion</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <strong style="font-size:1.5rem;color:var(--gold);">{{ req.avg_score() }}%</strong>
+                <div style="font-size:0.8rem;color:#999;">Avg Score</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <strong style="font-size:1.5rem;color:var(--teal);">{{ req.pass_rate() }}%</strong>
+                <div style="font-size:0.8rem;color:#999;">Pass Rate</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if stats %}
+<div class="card mt-3">
+    <div class="card-header d-flex justify-content-between">
+        <span><i class="bi bi-table"></i> Learner Records</span>
+        <div>
+            <a href="{{ url_for('export_request', req_id=req.id, fmt='xlsx') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Export to Excel</a>
+            <a href="{{ url_for('download_stats_template', req_id=req.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Download CSV</a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div style="max-height:400px;overflow-y:auto;">
+        <table class="table table-sm" style="font-size:0.8rem;">
+            <thead><tr><th>Name</th><th>Email</th><th>Status</th><th>%</th><th>Score</th><th>Passed</th><th>Time</th></tr></thead>
+            <tbody>
+                {% for s in stats %}
+                <tr>
+                    <td>{{ s.learner_name or '—' }}</td>
+                    <td>{{ s.learner_email or '—' }}</td>
+                    <td><span class="phase-badge" style="background:{% if s.completion_status=='Completed' %}#E8F5E9;color:#1E8445{% elif s.completion_status=='In Progress' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};">{{ s.completion_status }}</span></td>
+                    <td>{{ '%.0f'|format(s.completion_pct or 0) }}%</td>
+                    <td>{{ '%.0f'|format(s.score or 0) }}%</td>
+                    <td>{% if s.passed %}<span class="phase-badge" style="background:#E8F5E9;color:#1E8445;">✓</span>{% elif s.passed is not none %}<span class="phase-badge" style="background:#FDEDEC;color:var(--red);">✗</span>{% else %}—{% endif %}</td>
+                    <td>{{ s.time_spent_minutes or '—' }} min</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card mt-3"><div class="card-body text-center py-4" style="color:#999;">No learning records uploaded yet.</div></div>
+{% endif %}
+{% endblock %}

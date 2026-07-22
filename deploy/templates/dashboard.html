@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color:var(--navy); font-weight:700; margin:0;"><i class="bi bi-speedometer2"></i> Dashboard</h4>
+    <a href="{{ url_for('new_request') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New Request</a>
+</div>
+
+<!-- STAT CARDS -->
+<div class="row g-3 mb-4">
+    {% set cards = [
+        ('Total Requests', total, 'bi-inbox', 'var(--navy)', '#E8F0F8'),
+        ('In Progress', in_progress, 'bi-arrow-repeat', 'var(--accent)', '#D4E6F1'),
+        ('Completed', completed, 'bi-check-circle', 'var(--green)', '#E8F5E9'),
+        ('New / Unassigned', new_requests, 'bi-envelope', 'var(--gold)', '#FDF2E0'),
+        ('Critical Priority', critical, 'bi-exclamation-triangle', 'var(--red)', '#FDEDEC'),
+        ('Escalations', escalation, 'bi-arrow-up-circle', '#C0392B', '#FDEDEC'),
+    ] %}
+    {% for label, value, icon, color, bg in cards %}
+    <div class="col-md-2 col-6">
+        <div class="card p-3" style="background:{{ bg }}; border-left:3px solid {{ color }};">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="kpi-value" style="color:{{ color }};">{{ value }}</div>
+                    <div class="kpi-label">{{ label }}</div>
+                </div>
+                <i class="bi {{ icon }}" style="font-size:1.5rem; color:{{ color }}; opacity:0.3;"></i>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="row g-3">
+    <!-- PHASE PIPELINE -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header"><i class="bi bi-diagram-3"></i> ADDIE Pipeline — Requests by Phase</div>
+            <div class="card-body">
+                {% set phases = [
+                    ('inbox', 'Inbox', '#6c757d', 'bi-inbox'),
+                    ('analysis', 'Analysis', 'var(--accent)', 'bi-search'),
+                    ('design', 'Design', 'var(--teal)', 'bi-pencil-square'),
+                    ('development', 'Development', 'var(--gold)', 'bi-code-square'),
+                    ('implementation', 'Implementation', 'var(--green)', 'bi-rocket-takeoff'),
+                    ('evaluation', 'Evaluation', '#6F42C1', 'bi-bar-chart'),
+                ] %}
+                {% for key, label, color, icon in phases %}
+                {% set count = phase_counts.get(key, 0) %}
+                <div class="d-flex align-items-center mb-2">
+                    <i class="bi {{ icon }}" style="color:{{ color }}; width:24px;"></i>
+                    <div class="flex-grow-1 ms-2">
+                        <div class="d-flex justify-content-between">
+                            <span style="font-size:0.85rem;">{{ label }}</span>
+                            <span style="font-size:0.85rem; font-weight:600; color:{{ color }};">{{ count }}</span>
+                        </div>
+                        <div class="progress progress-thin" style="height:5px;">
+                            {% set pct = (count / total * 100) if total > 0 else 0 %}
+                            <div class="progress-bar" style="width:{{ pct }}%; background:{{ color }};"></div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- RECENT REQUESTS -->
+        <div class="card mt-3">
+            <div class="card-header d-flex justify-content-between">
+                <span><i class="bi bi-clock-history"></i> Recent Requests</span>
+                <a href="{{ url_for('request_list') }}" style="font-size:0.8rem;">View All →</a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0" style="font-size:0.85rem;">
+                        <thead><tr><th>Title</th><th>Priority</th><th>Phase</th><th>Status</th><th>Age</th></tr></thead>
+                        <tbody>
+                            {% for req in recent %}
+                            <tr onclick="window.location='{{ url_for('request_detail', req_id=req.id) }}'" style="cursor:pointer;">
+                                <td>{{ req.title[:50] }}{% if req.title|length > 50 %}...{% endif %}</td>
+                                <td><span class="phase-badge" style="background:{% if req.priority=='Critical' %}#FDEDEC;color:#C0392B{% elif req.priority=='High' %}#FDEBD0;color:#CC7A29{% elif req.priority=='Medium' %}#E8F0F8;color:#2E86AB{% else %}#f0f0f0;color:#666{% endif %}">{{ req.priority }}</span></td>
+                                <td><span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ req.current_phase|capitalize }}</span></td>
+                                <td><span class="phase-badge" style="background:{% if req.status=='Completed' %}#E8F5E9;color:#1E8445{% elif 'In' in req.status %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#666{% endif %}">{{ req.status }}</span></td>
+                                <td style="color:#999;font-size:0.75rem;">{{ (datetime.utcnow() - req.created_at).days }}d</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5" class="text-center py-3" style="color:#999;">No requests yet</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="col-md-4">
+        <!-- KIRKPATRICK PROJECTED vs ACTUAL -->
+        <div class="card">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> Kirkpatrick — Projected vs Actual</div>
+            <div class="card-body">
+                {% set kcols = {'l1': 'var(--accent)', 'l2': 'var(--teal)', 'l3': 'var(--gold)', 'l4': 'var(--green)'} %}
+                {% set klabels = {'l1': 'L1 Reaction', 'l2': 'L2 Learning', 'l3': 'L3 Behaviour', 'l4': 'L4 Results'} %}
+                {% for level, colour in kcols.items() %}
+                <div class="mb-2">
+                    <div style="font-size:0.75rem;font-weight:600;color:{{ colour }};">{{ klabels[level] }}</div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span style="font-size:0.75rem;color:#999;">Target:</span>
+                        <span style="font-weight:600;font-size:0.9rem;">{{ proj_kirk[level] or '—' }}</span>
+                        <span style="font-size:0.75rem;color:#999;margin-left:8px;">Actual:</span>
+                        <span style="font-weight:600;font-size:0.9rem;color:var(--navy);">
+                            {{ act_kirk[level] or '—' }}
+                        </span>
+                        {% if proj_kirk[level] and act_kirk[level] %}
+                            {% set pnum = proj_kirk[level]|float %}
+                            {% set anum = act_kirk[level]|float %}
+                            {% if anum > pnum %}
+                                <span class="phase-badge" style="background:#E8F5E9;color:#1E8445;font-size:0.65rem;"><i class="bi bi-arrow-up-short"></i> Above target</span>
+                            {% elif anum < pnum and anum > 0 %}
+                                <span class="phase-badge" style="background:#FDEDEC;color:var(--red);font-size:0.65rem;"><i class="bi bi-arrow-down-short"></i> Below target</span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                <div style="font-size:0.65rem;color:#ccc;margin-top:4px;">Set projected in Analysis phase. Enter actual in any intervention's Kirkpatrick card.</div>
+            </div>
+        </div>
+
+        <!-- BLOCKERS -->
+        <div class="card mt-3">
+            <div class="card-header"><i class="bi bi-exclamation-triangle" style="color:var(--red);"></i> Active Blockers</div>
+            <div class="card-body">
+                {% if blocker_count > 0 %}
+                <div style="font-size:2rem; font-weight:700; color:var(--red);">{{ blocker_count }}</div>
+                <div style="font-size:0.8rem; color:#999;">Requests currently blocked</div>
+                <a href="{{ url_for('analytics') }}" class="btn btn-outline-danger btn-sm mt-2">View Blockers</a>
+                {% else %}
+                <p style="font-size:0.85rem; color:#999;">No active blockers — all phases progressing</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- PENDING APPROVALS -->
+        <div class="card mt-3" id="pending-approvals-card">
+            <div class="card-header"><i class="bi bi-check2-square"></i> Pending My Approval</div>
+            <div class="card-body" id="pending-approvals-list">
+                <p style="font-size:0.85rem; color:#999;">Loading...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(function() {
+    $.get('/api/pending-approvals', function(data) {
+        var html = '';
+        if (data.length === 0) {
+            html = '<p style="font-size:0.85rem; color:#999;">No pending approvals</p>';
+        } else {
+            html = '<div class="list-group list-group-flush">';
+            data.forEach(function(a) {
+                html += '<a href="/requests/' + a.request_id + '" class="list-group-item list-group-item-action" style="font-size:0.85rem; border: none; padding: 0.5rem 0;">';
+                html += '<strong>' + a.request_title + '</strong><br>';
+                html += '<span style="color:#999;">' + a.phase + ' phase · ' + a.created + '</span>';
+                html += '</a>';
+            });
+            html += '</div>';
+        }
+        $('#pending-approvals-list').html(html);
+    });
+});
+</script>
+{% endblock %}

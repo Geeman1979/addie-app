@@ -1,0 +1,96 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-people-fill"></i> Cohorts — {{ req.title }}</h4>
+<a href="{{ url_for('request_detail', req_id=req.id) }}" class="btn btn-outline-secondary btn-sm mb-3">← Back to Request</a>
+<p style="color:#666;font-size:0.85rem;">Create cohorts (groups/classes) within this request. Each cohort has its own learning stats upload.</p>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card"><div class="card-header"><i class="bi bi-plus-circle"></i> New Cohort</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('new_cohort', req_id=req.id) }}" class="row g-2">
+                    <div class="col-12"><input type="text" name="name" class="form-control form-control-sm" placeholder="Cohort name (e.g. Cohort A)" required></div>
+                    <div class="col-12"><textarea name="description" class="form-control form-control-sm" rows="2" placeholder="Description of this cohort"></textarea></div>
+                    <div class="col-6"><input type="text" name="learner_count" class="form-control form-control-sm" placeholder="Learners"></div>
+                    <div class="col-6">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="Planned">Planned</option>
+                            <option value="Active">Active</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="col-6"><input type="date" name="start_date" class="form-control form-control-sm" placeholder="Start"></div>
+                    <div class="col-6"><input type="date" name="end_date" class="form-control form-control-sm" placeholder="End"></div>
+                    <div class="col-12"><button class="btn btn-primary btn-sm w-100">Create Cohort</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        {% for c in cohorts %}
+        <div class="card mb-2"><div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <strong>{{ c.name }}</strong>
+                    <a href="#" class="text-decoration-none ms-1" style="font-size:0.65rem;color:#999;" onclick="event.stopPropagation();document.getElementById('cedit-{{ c.id }}').classList.toggle('d-none');return false;" title="Edit cohort"><i class="bi bi-pencil"></i></a>
+                    <form id="cedit-{{ c.id }}" method="POST" action="{{ url_for('edit_cohort', cid=c.id) }}" class="d-none mt-1" onsubmit="event.stopPropagation();">
+                        <div class="d-flex gap-1">
+                            <input type="text" name="name" class="form-control form-control-sm" value="{{ c.name }}" style="width:180px;font-size:0.8rem;" required>
+                            <input type="text" name="description" class="form-control form-control-sm" value="{{ c.description or '' }}" style="width:200px;font-size:0.8rem;" placeholder="Description">
+                            <button type="submit" class="btn btn-success btn-sm py-0 px-1" style="font-size:0.65rem;"><i class="bi bi-check"></i></button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:0.65rem;" onclick="event.stopPropagation();this.closest('form').classList.add('d-none');return false;"><i class="bi bi-x"></i></button>
+                        </div>
+                    </form>
+                    <span class="phase-badge ms-2" style="background:{% if c.status=='Active' %}#E8F5E9;color:#1E8445{% elif c.status=='Completed' %}#D4E6F1;color:var(--accent){% else %}#f0f0f0;color:#999{% endif %};">{{ c.status }}</span>
+                    <span class="phase-badge ms-1" style="background:#E8F0F8;color:var(--accent);">{{ c.learner_count or '?' }} learners</span>
+                    <div style="font-size:0.8rem;color:#999;margin-top:2px;">
+                        {% if c.start_date %}{{ c.start_date.strftime('%d %b %Y') }}{% endif %}
+                        {% if c.end_date %} — {{ c.end_date.strftime('%d %b %Y') }}{% endif %}
+                        {% set s = c.learning_stats.count() %}
+                        · {{ s }} learner records uploaded
+                    </div>
+                    {% if c.description %}<div style="font-size:0.8rem;color:#666;margin-top:2px;">{{ c.description }}</div>{% endif %}
+                </div>
+                <div class="d-flex gap-1">
+                    <form method="POST" action="{{ url_for('upload_cohort_stats', cid=c.id) }}" enctype="multipart/form-data" class="d-flex gap-1 align-items-center">
+                        <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required style="width:140px;">
+                        <button class="btn btn-primary btn-sm"><i class="bi bi-upload"></i></button>
+                    </form>
+                    <a href="{{ url_for('download_cohort_stats_template', cid=c.id) }}" class="btn btn-outline-primary btn-sm" title="Download CSV Template"><i class="bi bi-download"></i></a>
+                    <form method="POST" action="{{ url_for('delete_cohort', cid=c.id) }}" onsubmit="return confirm('Delete this cohort and its stats?')">
+                        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                    </form>
+                </div>
+            </div>
+
+            {% set stats = c.learning_stats.all() %}
+            {% if stats %}
+            <div class="table-responsive mt-2" style="max-height:150px;">
+                <table class="table table-sm" style="font-size:0.75rem;">
+                    <thead><tr><th>Learner</th><th>Status</th><th>%</th><th>Score</th><th>Passed</th></tr></thead>
+                    <tbody>
+                        {% for s in stats[:20] %}
+                        <tr><td>{{ s.learner_name or s.learner_email }}{% if s.learner_email and s.learner_name != s.learner_email %} <span style="color:#999;font-size:0.65rem;">({{ s.learner_email }})</span>{% endif %}</td>
+                            <td><span class="phase-badge" style="background:{% if s.completion_status=='Completed' %}#E8F5E9;color:#1E8445{% elif s.completion_status=='In Progress' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};">{{ s.completion_status }}</span></td>
+                            <td>{{ '%.0f'|format(s.completion_pct or 0) }}%</td>
+                            <td>{{ '%.0f'|format(s.score or 0) }}%</td>
+                            <td>{% if s.passed %}<span class="phase-badge" style="background:#E8F5E9;color:#1E8445;">✓</span>{% elif s.passed is not none %}<span style="color:var(--red);">✗</span>{% else %}—{% endif %}</td>
+                        </tr>{% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            <div class="mt-2 pt-2" style="border-top:1px solid #eee;">
+                <form method="POST" action="{{ url_for('add_cohort_learner', cid=c.id) }}" class="d-flex gap-1 align-items-center">
+                    <input type="text" name="learner_name" class="form-control form-control-sm" placeholder="Add a learner by name" required style="font-size:0.8rem;flex:1;">
+                    <input type="text" name="learner_email" class="form-control form-control-sm" placeholder="Email (optional)" style="font-size:0.8rem;width:180px;">
+                    <button class="btn btn-success btn-sm"><i class="bi bi-plus"></i></button>
+                </form>
+            </div>
+        </div></div>
+        {% else %}
+        <div class="text-center py-5" style="color:#999;"><i class="bi bi-people" style="font-size:2rem;display:block;margin-bottom:8px;"></i>No cohorts yet. Create one on the left.</div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

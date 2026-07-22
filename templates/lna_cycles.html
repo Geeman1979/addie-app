@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-piggy-bank"></i> LNA Budget Cycles</h4>
+<p style="color:#666;font-size:0.85rem;">Define financial years / training seasons. Planned requests are linked to a cycle for budget tracking.</p>
+
+<div class="card mb-3"><div class="card-header"><i class="bi bi-plus-circle"></i> New LNA Cycle</div>
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('new_lna_cycle') }}" class="row g-2">
+            <div class="col-md-4"><input type="text" name="name" class="form-control form-control-sm" placeholder="e.g. FY2026 H1" required></div>
+            <div class="col-md-3"><input type="number" name="budget_amount" class="form-control form-control-sm" placeholder="Budget (Rands)" step="0.01"></div>
+            <div class="col-md-2"><input type="date" name="start_date" class="form-control form-control-sm" required></div>
+            <div class="col-md-2"><input type="date" name="end_date" class="form-control form-control-sm" required></div>
+            <div class="col-md-1"><button class="btn btn-primary btn-sm w-100">Create</button></div>
+            <div class="col-md-12"><textarea name="description" class="form-control form-control-sm" rows="1" placeholder="Description of this LNA cycle"></textarea></div>
+        </form>
+    </div>
+</div>
+
+<div class="card"><div class="card-header"><i class="bi bi-list"></i> All Cycles</div>
+    <div class="card-body p-0">
+        <table class="table table-sm" style="font-size:0.85rem;">
+            <thead><tr><th>Cycle Name</th><th>Budget</th><th>Start</th><th>End</th><th>Requests</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+                {% for c in cycles %}
+                <tr>
+                    <td><strong>{{ c.name }}</strong><br><small style="color:#666;">{{ c.description or '' }}</small></td>
+                    <td><strong>R{{ "%.0f"|format(c.budget_amount) }}</strong></td>
+                    <td>{{ c.start_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ c.end_date.strftime('%d %b %Y') }}</td>
+                    <td><span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ c.requests.count() }} interventions · {{ c.department_budgets.count() }} depts</span></td>
+                    <td><span class="phase-badge" style="background:{% if c.status=='Planning' %}#FDEBD0;color:#CC7A29{% elif c.status=='Active' %}#E8F5E9;color:#1E8445{% else %}#f0f0f0;color:#999{% endif %};">{{ c.status }}</span></td>
+                    <td>
+                        <a href="{{ url_for('lna_cycle_detail', cid=c.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-bar-chart"></i> Budget</a>
+                        {% if c.status != 'Closed' %}
+                        <form method="POST" action="{{ url_for('close_lna_cycle', cid=c.id) }}" onsubmit="return confirm('Close this cycle?')" style="display:inline;">
+                            <button class="btn btn-outline-secondary btn-sm">Close</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}<tr><td colspan="7" class="text-center py-3" style="color:#999;">No LNA cycles yet. Create one above.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

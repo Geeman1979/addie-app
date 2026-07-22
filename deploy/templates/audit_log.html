@@ -1,0 +1,24 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-journal-text"></i> Audit Log</h4>
+<p style="color:#666;font-size:0.85rem;">All significant actions in the system, ordered newest first.</p>
+
+<div class="card"><div class="card-body p-0">
+    <table class="table table-sm" style="font-size:0.85rem;">
+        <thead><tr><th>Date/Time</th><th>User</th><th>Action</th><th>Entity</th><th>ID</th><th>Details</th></tr></thead>
+        <tbody>
+            {% for log in logs %}
+            <tr>
+                <td style="white-space:nowrap;">{{ log.created_at.strftime('%d %b %Y %H:%M') if log.created_at else '—' }}</td>
+                <td>{{ log.user.name if log.user else 'System' }}</td>
+                <td><span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ log.action }}</span></td>
+                <td>{{ log.entity_type }}</td>
+                <td>{{ log.entity_id or '—' }}</td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">{{ log.details or '' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center py-4" style="color:#999;">No audit log entries yet</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div></div>
+{% endblock %}

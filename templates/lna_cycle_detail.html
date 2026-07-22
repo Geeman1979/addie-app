@@ -1,0 +1,144 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-piggy-bank"></i> LNA Budget: {{ cycle.name }}</h4>
+<a href="{{ url_for('lna_cycles') }}" class="btn btn-outline-secondary btn-sm mb-3">← All Cycles</a>
+<span class="phase-badge" style="background:{% if cycle.status=='Planning' %}#FDEBD0;color:#CC7A29{% elif cycle.status=='Active' %}#E8F5E9;color:#1E8445{% else %}#f0f0f0;color:#999{% endif %};">{{ cycle.status }}</span>
+<span style="font-size:0.85rem;color:#999;margin-left:8px;">{{ cycle.start_date.strftime('%d %b %Y') }} — {{ cycle.end_date.strftime('%d %b %Y') }}</span>
+
+<!-- Budget Summary Cards -->
+<div class="row g-3 mt-1 mb-3">
+    <div class="col-md-3"><div class="card p-3" style="border-left:4px solid var(--navy);">
+        <div style="font-size:0.75rem;color:#999;text-transform:uppercase;">Total Budget</div>
+        <div style="font-size:1.6rem;font-weight:700;color:var(--navy);">R{{ "%.0f"|format(total_budget) }}</div>
+    </div></div>
+    <div class="col-md-3"><div class="card p-3" style="border-left:4px solid var(--accent);">
+        <div style="font-size:0.75rem;color:#999;text-transform:uppercase;">Allocated to Depts</div>
+        <div style="font-size:1.6rem;font-weight:700;color:var(--accent);">R{{ "%.0f"|format(total_allocated) }}</div>
+    </div></div>
+    <div class="col-md-3"><div class="card p-3" style="border-left:4px solid var(--gold);">
+        <div style="font-size:0.75rem;color:#999;text-transform:uppercase;">Spent (Dept tracked)</div>
+        <div style="font-size:1.6rem;font-weight:700;color:var(--gold);">R{{ "%.0f"|format(total_spent_dept) }}</div>
+    </div></div>
+    <div class="col-md-3"><div class="card p-3" style="border-left:4px solid var(--green);">
+        <div style="font-size:0.75rem;color:#999;text-transform:uppercase;">Intervention Costs</div>
+        <div style="font-size:1.6rem;font-weight:700;color:var(--green);">R{{ "%.0f"|format(total_cost_interventions) }}</div>
+    </div></div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><i class="bi bi-building"></i> Department Budget Allocation</div>
+            <div class="card-body">
+                <button class="btn btn-outline-primary btn-sm mb-2" data-bs-toggle="collapse" data-bs-target="#add-dept"><i class="bi bi-plus"></i> Add Department</button>
+                <div class="collapse" id="add-dept">
+                    <form method="POST" action="{{ url_for('add_department_budget', cid=cycle.id) }}" class="row g-2 p-3 mb-2" style="background:#F8F9FA;border-radius:6px;">
+                        <div class="col-md-6"><input type="text" name="department_name" class="form-control form-control-sm" placeholder="Department name" required></div>
+                        <div class="col-md-6"><input type="number" name="allocated_budget" class="form-control form-control-sm" placeholder="Allocated Rands" step="0.01"></div>
+                        <div class="col-md-12"><textarea name="notes" class="form-control form-control-sm" rows="1" placeholder="Notes / justification"></textarea></div>
+                        <div class="col-12"><button class="btn btn-primary btn-sm">Add</button></div>
+                    </form>
+                </div>
+                {% if departments %}
+                <div class="table-responsive">
+                    <table class="table table-sm" style="font-size:0.85rem;">
+                        <thead><tr><th>Department</th><th>Allocated</th><th>Spent</th><th>Remaining</th><th>Interventions</th><th></th></tr></thead>
+                        <tbody>
+                            {% set grand_alloc = 0 %}{% set grand_spent = 0 %}
+                            {% for d in departments %}
+                            {% set rem = d.allocated_budget - d.spent_budget %}
+                            {% set grand_alloc = grand_alloc + d.allocated_budget %}
+                            {% set grand_spent = grand_spent + d.spent_budget %}
+                            <tr>
+                                <td><strong>{{ d.department_name }}</strong></td>
+                                <td>R{{ "%.0f"|format(d.allocated_budget) }}</td>
+                                <td>R{{ "%.0f"|format(d.spent_budget) }}</td>
+                                <td><span style="color:{% if rem >= 0 %}var(--green){% else %}var(--red){% endif %};font-weight:600;">R{{ "%.0f"|format(rem) }}</span></td>
+                                <td><span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ d.requests_in_department()|length }}</span></td>
+                                <td>
+                                    <button class="btn btn-outline-primary btn-sm" onclick="editDept({{ d.id }},{{ d.allocated_budget }},{{ d.spent_budget }},'{{ d.notes or '' }}')"><i class="bi bi-pencil"></i></button>
+                                    <form method="POST" action="{{ url_for('delete_dept_budget', did=d.id) }}" style="display:inline;" onsubmit="return confirm('Remove this department?')">
+                                        <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot><tr style="font-weight:700;background:#F8F9FA;">
+                            <td>TOTAL</td><td>R{{ "%.0f"|format(grand_alloc) }}</td><td>R{{ "%.0f"|format(grand_spent) }}</td>
+                            <td style="color:{% if grand_alloc - grand_spent >= 0 %}var(--green){% else %}var(--red){% endif %};">R{{ "%.0f"|format(grand_alloc - grand_spent) }}</td>
+                            <td colspan="2"></td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <p style="font-size:0.85rem;color:#999;">No departments added yet. Add departments and allocate budget above.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card"><div class="card-header"><i class="bi bi-list-check"></i> Planned Interventions ({{ interventions|length }})</div>
+            <div class="card-body p-0">
+                {% if interventions %}
+                <div class="table-responsive">
+                    <table class="table table-sm" style="font-size:0.85rem;">
+                        <thead><tr><th>Intervention</th><th>Department</th><th>Status</th><th>Cost (R)</th><th></th></tr></thead>
+                        <tbody>
+                            {% for r in interventions %}
+                            <tr>
+                                <td><a href="{{ url_for('request_detail', req_id=r.id) }}">{{ r.title[:45] }}</a></td>
+                                <td>{{ r.requester_department or '—' }}</td>
+                                <td><span class="phase-badge" style="background:{% if r.status=='Completed' %}#E8F5E9;color:#1E8445{% elif 'In ' in r.status %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#666{% endif %};">{{ r.status }}</span></td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('update_request_cost', cid=cycle.id, rid=r.id) }}" class="d-flex gap-1">
+                                        <input type="number" name="allocated_cost" class="form-control form-control-sm" value="{{ r.allocated_cost or 0 }}" step="0.01" style="width:100px;">
+                                        <button class="btn btn-outline-primary btn-sm"><i class="bi bi-check"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                        <tfoot><tr style="font-weight:700;background:#F8F9FA;">
+                            <td colspan="3">Total Intervention Costs</td>
+                            <td>R{{ "%.0f"|format(total_cost_interventions) }}</td>
+                            <td></td>
+                        </tr></tfoot>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-4" style="color:#999;">
+                    No planned interventions linked to this cycle yet.
+                    <a href="{{ url_for('new_request') }}">Create a Planned request</a> and assign it to this LNA cycle.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Department Modal -->
+<div class="modal fade" id="editDeptModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <form method="POST" id="editDeptForm">
+            <div class="modal-header"><h5 class="modal-title">Update Department Budget</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="mb-2"><label style="font-size:0.85rem;">Allocated Budget (R)</label><input type="number" name="allocated_budget" id="edit-alloc" class="form-control" step="0.01"></div>
+                <div class="mb-2"><label style="font-size:0.85rem;">Spent Budget (R)</label><input type="number" name="spent_budget" id="edit-spent" class="form-control" step="0.01"></div>
+                <div class="mb-2"><label style="font-size:0.85rem;">Notes</label><textarea name="notes" id="edit-notes" class="form-control" rows="2"></textarea></div>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">Update</button></div>
+        </form>
+    </div></div>
+</div>
+
+<script>
+function editDept(id, alloc, spent, notes) {
+    document.getElementById('edit-alloc').value = alloc;
+    document.getElementById('edit-spent').value = spent;
+    document.getElementById('edit-notes').value = notes;
+    document.getElementById('editDeptForm').action = '/lna-cycles/dept/' + id + '/update';
+    new bootstrap.Modal(document.getElementById('editDeptModal')).show();
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

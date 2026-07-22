@@ -1,0 +1,860 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color:var(--navy); font-weight:700;"><i class="bi bi-file-text"></i> {{ req.title }}</h4>
+    <div>
+        <a href="{{ url_for('request_list') }}" class="btn btn-outline-secondary btn-sm">← Interventions</a>
+        <a href="{{ url_for('export_request', req_id=req.id, fmt='xlsx') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Export to Excel</a>
+        <a href="{{ url_for('analytics') }}" class="btn btn-outline-info btn-sm"><i class="bi bi-graph-up"></i> Analytics</a>
+    </div>
+</div>
+
+<!-- REQUEST HEADER -->
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <span class="phase-badge" style="background:
+                    {%- if req.priority == 'Critical' %}#FDEDEC;color:#C0392B
+                    {%- elif req.priority == 'High' %}#FDEBD0;color:#CC7A29
+                    {%- elif req.priority == 'Medium' %}#E8F0F8;color:#2E86AB
+                    {%- else %}#f0f0f0;color:#666{% endif %}">
+                    {{ req.priority }}
+                    </span>
+                    <span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">
+                        <i class="bi bi-diagram-3"></i> {{ req.current_phase|capitalize }}
+                    </span>
+                    <span class="phase-badge" style="background:
+                    {%- if req.status == 'Completed' %}#E8F5E9;color:#1E8445
+                    {%- elif 'In ' in req.status %}#FDEBD0;color:#CC7A29
+                    {%- else %}#f0f0f0;color:#666{% endif %}">
+                    {{ req.status }}
+                    </span>
+                    {% if req.is_adhoc %}
+                    <span class="phase-badge" style="background:#FDEBD0;color:#CC7A29;">AD HOC — Skips Full Analysis</span>
+                    {% endif %}
+                </div>
+                <div style="font-size:0.8rem; color:#666;">
+                    {{ req.requester_name or 'Unknown' }} · {{ req.requester_department or '—' }}
+                    · Created {{ req.created_at.strftime('%d %b %Y') }}
+                    {% if req.deadline %} · Due {{ req.deadline.strftime('%d %b %Y') }}{% endif %}
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                {% if req.projected_roi %}
+                <div class="text-center px-3" style="border-right:1px solid #eee;">
+                    <div style="font-size:0.7rem; color:#999;">Projected ROI</div>
+                    <div style="font-weight:700; color:var(--green);">R{{ "%.0f"|format(req.projected_roi) }}</div>
+                </div>
+                {% endif %}
+                {% if req.actual_roi %}
+                <div class="text-center px-3">
+                    <div style="font-size:0.7rem; color:#999;">Actual ROI</div>
+                    <div style="font-weight:700; color:{% if req.actual_roi >= req.projected_roi %}var(--green){% else %}var(--red){% endif %};">R{{ "%.0f"|format(req.actual_roi) }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- LEFT: ADDIE PHASE WORKFLOW -->
+    <div class="col-md-8">
+        <!-- PHASE TIMELINE -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-diagram-3"></i> ADDIE Workflow — Phase Progress</div>
+            <div class="card-body">
+                <ul class="phase-timeline">
+                    {% set phase_info = [
+                        ('inbox', 'INBOX', 'Request received, triaged, and prioritised', 'bi-inbox'),
+                        ('analysis', 'ANALYSIS', 'Needs analysis, interview guide, target audience, ROI projection', 'bi-search'),
+                        ('design', 'DESIGN', 'Learning objectives, storyboard, assessment strategy', 'bi-pencil-square'),
+                        ('development', 'DEVELOPMENT', 'Content creation, AI-assisted authoring, QA review', 'bi-code-square'),
+                        ('implementation', 'IMPLEMENTATION', 'LMS upload, enrolment, WalkMe activation, go-live', 'bi-rocket-takeoff'),
+                        ('evaluation', 'EVALUATION', 'Kirkpatrick L1-L4, ROI tracking, lessons learned', 'bi-bar-chart'),
+                    ] %}
+                    {% for key, label, desc, icon in phase_info %}
+                    {% set ps = phases.get(key) %}
+                    {% set st = ps.status if ps else 'Not Started' %}
+                    <li class="{% if st == 'Completed' %}completed{% elif st == 'In Progress' %}active{% elif st == 'Blocked' %}blocked{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong style="font-size:0.9rem;">{{ label }}</strong>
+                                <span class="phase-badge ms-2" style="background:
+                                    {%- if st == 'Completed' %}#E8F5E9;color:#1E8445
+                                    {%- elif st == 'In Progress' %}#FDEBD0;color:#CC7A29
+                                    {%- elif st == 'Blocked' %}#FDEDEC;color:#C0392B
+                                    {%- else %}#f0f0f0;color:#999{% endif %}">
+                                    {{ st }}
+                                </span>
+                                <div style="font-size:0.8rem; color:#666;">{{ desc }}</div>
+                            </div>
+                            <div>
+                                {% if st == 'Not Started' and key == 'inbox' and req.review_status == 'Pending' %}
+                                {% if current_user.is_learning_expert() %}
+                                <form method="POST" action="{{ url_for('review_request', req_id=req.id) }}" style="display:inline-flex;gap:4px;" onclick="event.stopPropagation();">
+                                    <input type="text" name="review_comment" class="form-control form-control-sm" placeholder="Reason" style="width:120px;font-size:0.7rem;" maxlength="200">
+                                    <button type="submit" name="review_action" value="Accepted" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Accept</button>
+                                    <button type="submit" name="review_action" value="Rejected" class="btn btn-danger btn-sm"><i class="bi bi-x-lg"></i> Reject</button>
+                                </form>
+                                {% else %}
+                                <span class="phase-badge" style="background:#FDEBD0;color:#CC7A29;">Pending Review</span>
+                                {% endif %}
+                                {% elif st == 'Not Started' %}
+                                {% if current_user.is_learning_expert() %}
+                                <form method="POST" action="{{ url_for('start_phase', req_id=req.id, phase_name=key) }}" style="display:inline;">
+                                    <button type="submit" class="btn btn-success btn-sm">Start</button>
+                                </form>
+                                {% else %}
+                                <span class="phase-badge" style="background:#f0f0f0;color:#999;">Not Started</span>
+                                {% endif %}
+                                {% elif st == 'In Progress' %}
+                                {% if current_user.is_learning_expert() %}
+                                <form method="POST" action="{{ url_for('complete_phase', req_id=req.id, phase_name=key) }}" style="display:inline;">
+                                    <button type="submit" class="btn btn-sm btn-outline-success">Complete</button>
+                                </form>
+                                {% else %}
+                                <span class="phase-badge" style="background:#FDEBD0;color:#CC7A29;">In Progress</span>
+                                {% endif %}
+                                {% elif st == 'Completed' %}
+                                {% if current_user.is_learning_expert() %}
+                                <form method="POST" action="{{ url_for('revert_phase', req_id=req.id, phase_name=key) }}" style="display:inline;" onsubmit="return confirm('Revert {{ label }} back to In Progress?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning"><i class="bi bi-arrow-counterclockwise"></i> Revert</button>
+                                </form>
+                                {% else %}
+                                <span class="phase-badge" style="background:#E8F5E9;color:#1E8445;">Completed</span>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <!-- PHASE ACTIVITIES — all phases, one accordion-style card per phase -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between">
+                <span><i class="bi bi-list-task"></i> Phase Activities — Add across all phases</span>
+                <span style="font-size:0.8rem;color:#999;">Activities appear as 🟣 purple events on the Calendar</span>
+            </div>
+            <div class="card-body p-0">
+                {% set all_phase_names = ['inbox','analysis','design','development','implementation','evaluation'] %}
+                {% for pname in all_phase_names %}
+                {% set ps = phases.get(pname) %}
+                {% set st = ps.status if ps else 'Not Started' %}
+                <div style="border-bottom:1px solid #eee;">
+                    <div class="p-2" style="background:{% if st=='In Progress' %}#FFFDE7{% elif st=='Completed' %}#F1F8E9{% else %}#FAFAFA{% endif %};cursor:pointer;"
+                         onclick="event.stopPropagation();document.getElementById('act-{{ pname }}').classList.toggle('d-none')">
+                        <strong style="font-size:0.85rem;color:var(--navy);">{{ pname|capitalize }}</strong>
+                        <span class="phase-badge ms-2" style="background:{% if st=='Completed' %}#E8F5E9;color:#1E8445{% elif st=='In Progress' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};font-size:0.65rem;">{{ st }}</span>
+                        <span style="font-size:0.7rem;color:#999;float:right;"><i class="bi bi-chevron-down"></i></span>
+                    </div>
+                    <div id="act-{{ pname }}" class="{% if st=='In Progress' %}{% else %}d-none{% endif %}">
+                        <div class="p-2">
+                        {% set phase_activities = activities|selectattr('phase_name','equalto',pname)|list %}
+                        {% if phase_activities %}
+                        <div style="max-height:150px;overflow-y:auto;">
+                        <table class="table table-sm" style="font-size:0.75rem;">
+                            <thead><tr><th>Activity</th><th>Owner</th><th>Dates</th><th>Status</th><th></th></tr></thead>
+                            <tbody>
+                                {% for a in phase_activities %}
+                                <tr>
+                                    <td><strong>{{ a.activity_name }}</strong>{% if a.description %}<br><small style="color:#999;">{{ a.description[:50] }}</small>{% endif %}</td>
+                                    <td>{{ a.owner.name if a.owner else '—' }}</td>
+                                    <td>{{ a.start_date.strftime('%d %b') }} — {{ a.end_date.strftime('%d %b') }}</td>
+                                    <td><span class="phase-badge" style="background:{% if a.status=='Completed' %}#E8F5E9;color:#1E8445{% elif a.status=='In Progress' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};font-size:0.6rem;">{{ a.status }}</span></td>
+                                    <td>
+                                        <form method="POST" action="{{ url_for('delete_phase_activity', aid=a.id) }}" style="display:inline;" onsubmit="return confirm('Delete this activity?')">
+                                            <button class="btn btn-outline-danger btn-sm py-0 px-1"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                        </div>
+                        {% else %}
+                        <p style="font-size:0.75rem;color:#999;padding:4px 0;">No activities for this phase yet.</p>
+                        {% endif %}
+                        <form method="POST" action="{{ url_for('add_phase_activity', req_id=req.id, phase_name=pname) }}" class="row g-1">
+                            <div class="col-12"><input type="text" name="activity_name" class="form-control form-control-sm" placeholder="Activity name" required style="font-size:0.75rem;"></div>
+                            <div class="col-12"><textarea name="description" class="form-control form-control-sm" rows="1" placeholder="Description (optional)" style="font-size:0.75rem;"></textarea></div>
+                            <div class="col-5">
+                                <select name="owner_id" class="form-select form-select-sm" style="font-size:0.75rem;">
+                                    <option value="">— Owner —</option>
+                                    {% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-2"><input type="date" name="start_date" class="form-control form-control-sm" required style="font-size:0.7rem;"></div>
+                            <div class="col-2"><input type="date" name="end_date" class="form-control form-control-sm" required style="font-size:0.7rem;"></div>
+                            <div class="col-3"><button type="submit" class="btn btn-primary btn-sm w-100" style="font-size:0.7rem;"><i class="bi bi-plus"></i> Add</button></div>
+                        </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- ACTIVE PHASE DETAIL -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between">
+                <span><i class="bi bi-pencil"></i> Current Phase: {{ req.current_phase|capitalize }}</span>
+                <span style="font-size:0.8rem; color:#999;">{{ req.days_in_phase() }} days in this phase</span>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('save_phase', req_id=req.id, phase_name=req.current_phase) }}">
+                {% if req.current_phase == 'analysis' %}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Target Audience Confirmed</label>
+                        <input type="text" name="target_audience_confirmed" class="form-control" placeholder="e.g. Ops team (15 people)" value="{{ req.phase_data('analysis').get('target_audience_confirmed', '') }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Content Reuse Potential</label>
+                        <select name="reuse_potential" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="High" {% if req.phase_data('analysis').get('reuse_potential')=='High' %}selected{% endif %}>High — can be shared across 3+ programmes</option>
+                            <option value="Medium" {% if req.phase_data('analysis').get('reuse_potential')=='Medium' %}selected{% endif %}>Medium — can be shared across 2 programmes</option>
+                            <option value="Low" {% if req.phase_data('analysis').get('reuse_potential')=='Low' %}selected{% endif %}>Low — specific to one audience</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Business Impact Hypothesis</label>
+                        <textarea name="bih" class="form-control" rows="2" placeholder="If we deliver this training, what will change? How will we measure it?">{{ req.phase_data('analysis').get('bih', '') }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Data Sources Used</label>
+                        <div>
+                            {% for src in ['Zendesk','Jira','Sonata','QA Scores','Manager Input'] %}
+                            <div class="form-check form-check-inline">
+                                <input type="checkbox" name="data_sources" value="{{ src }}" class="form-check-input"
+                                {% if src in (req.phase_data('analysis').get('data_sources') or '') %}checked{% endif %}>
+                                <label class="form-check-label" style="font-size:0.8rem;">{{ src }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Projected ROI (Rands)</label>
+                        <input type="number" name="projected_roi_update" class="form-control" value="{{ req.projected_roi or '' }}" step="0.01">
+                    </div>
+                </div>
+                <div class="mt-3 p-3" style="background:#F0F4F8;border-radius:6px;">
+                    <label class="form-label" style="font-size:0.85rem; font-weight:700;color:var(--navy);"><i class="bi bi-bar-chart"></i> Projected Kirkpatrick Levels (Target Goals)</label>
+                    <div class="row g-2">
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L1 — Reaction</label><input type="text" name="projected_l1" class="form-control form-control-sm" placeholder="e.g. 4.5/5" value="{{ req.phase_data('analysis').get('projected_l1', '') }}"></div>
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L2 — Learning (Avg Score %)</label><input type="text" name="projected_l2" class="form-control form-control-sm" placeholder="e.g. 80%" value="{{ req.phase_data('analysis').get('projected_l2', '') }}"></div>
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L3 — Behaviour / Application</label><input type="text" name="projected_l3" class="form-control form-control-sm" placeholder="e.g. 70% observed" value="{{ req.phase_data('analysis').get('projected_l3', '') }}"></div>
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L4 — Business Insights</label><input type="text" name="projected_l4" class="form-control form-control-sm" placeholder="e.g. 90% SLA" value="{{ req.phase_data('analysis').get('projected_l4', '') }}"></div>
+                    </div>
+                    <div style="font-size:0.75rem;color:#999;margin-top:4px;">These are targets set during analysis. Actual results will be entered during implementation/evaluation.</div>
+                </div>
+                {% elif req.current_phase == 'design' %}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Learning Objectives (Bloom's)</label>
+                        <textarea name="learning_objectives" class="form-control" rows="3" placeholder="By the end of this module, learners will be able to...">{{ req.phase_data('design').get('learning_objectives', '') }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Delivery Format</label>
+                        <select name="delivery_format" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="eLearning (Rise)" {% if req.phase_data('design').get('delivery_format')=='eLearning (Rise)' %}selected{% endif %}>eLearning (Rise)</option>
+                            <option value="Video (Vyond)" {% if req.phase_data('design').get('delivery_format')=='Video (Vyond)' %}selected{% endif %}>Video (Vyond)</option>
+                            <option value="WalkMe Guide" {% if req.phase_data('design').get('delivery_format')=='WalkMe Guide' %}selected{% endif %}>WalkMe Guide</option>
+                            <option value="ILT / Virtual" {% if req.phase_data('design').get('delivery_format')=='ILT / Virtual' %}selected{% endif %}>ILT / Virtual</option>
+                            <option value="Job Aid / PDF" {% if req.phase_data('design').get('delivery_format')=='Job Aid / PDF' %}selected{% endif %}>Job Aid / PDF</option>
+                            <option value="Blended" {% if req.phase_data('design').get('delivery_format')=='Blended' %}selected{% endif %}>Blended</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Assessment Strategy</label>
+                        <textarea name="assessment_strategy" class="form-control" rows="2" placeholder="Formative checks, summative assessment, scenario-based evaluation">{{ req.phase_data('design').get('assessment_strategy', '') }}</textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Module Duration (minutes)</label>
+                        <input type="number" name="module_duration" class="form-control" value="{{ req.phase_data('design').get('module_duration', '') }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">SME Assigned</label>
+                        <input type="text" name="sme_assigned" class="form-control" value="{{ req.phase_data('design').get('sme_assigned', '') }}">
+                    </div>
+                </div>
+                {% elif req.current_phase == 'development' %}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Authoring Tool</label>
+                        <select name="authoring_tool" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="Articulate Rise" {% if req.phase_data('development').get('authoring_tool')=='Articulate Rise' %}selected{% endif %}>Articulate Rise</option>
+                            <option value="Articulate Storyline" {% if req.phase_data('development').get('authoring_tool')=='Articulate Storyline' %}selected{% endif %}>Articulate Storyline</option>
+                            <option value="Vyond" {% if req.phase_data('development').get('authoring_tool')=='Vyond' %}selected{% endif %}>Vyond</option>
+                            <option value="Canva" {% if req.phase_data('development').get('authoring_tool')=='Canva' %}selected{% endif %}>Canva</option>
+                            <option value="WalkMe Editor" {% if req.phase_data('development').get('authoring_tool')=='WalkMe Editor' %}selected{% endif %}>WalkMe Editor</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">QA Status</label>
+                        <select name="qa_status" class="form-select">
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress" {% if req.phase_data('development').get('qa_status')=='In Progress' %}selected{% endif %}>In Progress</option>
+                            <option value="Passed" {% if req.phase_data('development').get('qa_status')=='Passed' %}selected{% endif %}>Passed</option>
+                            <option value="Failed — Revisions Needed" {% if req.phase_data('development').get('qa_status')=='Failed - Revisions Needed' %}selected{% endif %}>Failed — Revisions Needed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Content Tags (Reuse Mapping)</label>
+                        <input type="text" name="content_tags" class="form-control" placeholder="e.g. compliance, onboarding, ifa" value="{{ req.phase_data('development').get('content_tags', '') }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">SME Sign-off Status</label>
+                        <select name="sme_signoff" class="form-select">
+                            <option value="Pending">Pending</option>
+                            <option value="Received" {% if req.phase_data('development').get('sme_signoff')=='Received' %}selected{% endif %}>Received</option>
+                            <option value="N/A" {% if req.phase_data('development').get('sme_signoff')=='N/A' %}selected{% endif %}>N/A</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Version / Build Notes</label>
+                        <textarea name="build_notes" class="form-control" rows="2">{{ req.phase_data('development').get('build_notes', '') }}</textarea>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;"><i class="bi bi-link-45deg"></i> Articulate Review Link (for SME Review)</label>
+                        <input type="url" name="review_link" class="form-control" placeholder="https://360.articulate.com/review/..." value="{{ req.phase_data('development').get('review_link', '') }}">
+                        <div style="font-size:0.75rem;color:#999;margin-top:2px;">Paste the Articulate Review link here so SMEs can access the course for review.</div>
+                    </div>
+                </div>
+                {% elif req.current_phase == 'implementation' %}
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Target LMS</label>
+                        <select name="target_lms" class="form-select">
+                            <option value="">Select...</option>
+                            <option value="Cornerstone" {% if req.phase_data('implementation').get('target_lms')=='Cornerstone' %}selected{% endif %}>Cornerstone</option>
+                            <option value="Liberty University" {% if req.phase_data('implementation').get('target_lms')=='Liberty University' %}selected{% endif %}>Liberty University</option>
+                            <option value="Degreed" {% if req.phase_data('implementation').get('target_lms')=='Degreed' %}selected{% endif %}>Degreed</option>
+                            <option value="CPD Portal" {% if req.phase_data('implementation').get('target_lms')=='CPD Portal' %}selected{% endif %}>CPD Portal</option>
+                            <option value="WalkMe" {% if req.phase_data('implementation').get('target_lms')=='WalkMe' %}selected{% endif %}>WalkMe</option>
+                            <option value="Multiple" {% if req.phase_data('implementation').get('target_lms')=='Multiple' %}selected{% endif %}>Multiple</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Enrolment Method</label>
+                        <select name="enrolment_method" class="form-select">
+                            <option value="Auto">Auto</option>
+                            <option value="Manual" {% if req.phase_data('implementation').get('enrolment_method')=='Manual' %}selected{% endif %}>Manual</option>
+                            <option value="Self-enrol" {% if req.phase_data('implementation').get('enrolment_method')=='Self-enrol' %}selected{% endif %}>Self-enrol</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Learners Enrolled</label>
+                        <input type="number" name="learners_enrolled" class="form-control" value="{{ req.phase_data('implementation').get('learners_enrolled', '') }}">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Go-Live Date</label>
+                        <input type="date" name="go_live_date" class="form-control" value="{{ req.phase_data('implementation').get('go_live_date', '') }}">
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Launch Comms Sent?</label>
+                        <div>
+                            <div class="form-check form-check-inline">
+                                <input type="radio" name="comms_sent" value="Yes" class="form-check-input" {% if req.phase_data('implementation').get('comms_sent')=='Yes' %}checked{% endif %}>
+                                <label class="form-check-label" style="font-size:0.8rem;">Yes</label>
+                            </div>
+                            <div class="form-check form-check-inline">
+                                <input type="radio" name="comms_sent" value="No" class="form-check-input" {% if req.phase_data('implementation').get('comms_sent')=='No' %}checked{% endif %}>
+                                <label class="form-check-label" style="font-size:0.8rem;">No</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;"><i class="bi bi-link-45deg"></i> LMS Course URL</label>
+                        <input type="url" name="lms_course_link" class="form-control" placeholder="https://stanlib.learn.com/course/..." value="{{ req.phase_data('implementation').get('lms_course_link', '') }}">
+                        <div style="font-size:0.75rem;color:#999;margin-top:2px;">Link to the published course on the LMS so the team can access it directly.</div>
+                    </div>
+                </div>
+                <div class="mt-3 p-3" style="background:#F0F4F8;border-radius:6px;">
+                    <label class="form-label" style="font-size:0.85rem; font-weight:700;color:var(--navy);"><i class="bi bi-check-circle"></i> Actual Kirkpatrick Results (Entered During Implementation)</label>
+                    <div class="row g-2">
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L1 — Reaction Score</label><input type="text" name="actual_l1" class="form-control form-control-sm" placeholder="e.g. 4.2/5" value="{{ req.phase_data('implementation').get('actual_l1', '') }}"></div>
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L2 — Avg Score % (from Uploaded Stats)</label><input type="text" name="actual_l2" class="form-control form-control-sm" placeholder="Auto-populated from analytics" value="{{ req.phase_data('implementation').get('actual_l2', req.avg_score()|string + '%' if req.avg_score() else '') }}" readonly style="background:#f5f5f5;"></div>
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L3 — Behaviour Change</label><input type="text" name="actual_l3" class="form-control form-control-sm" placeholder="e.g. 65% applied new skill" value="{{ req.phase_data('implementation').get('actual_l3', '') }}"></div>
+                        <div class="col-md-3"><label style="font-size:0.75rem;color:#666;">L4 — Business Impact</label><input type="text" name="actual_l4" class="form-control form-control-sm" placeholder="e.g. R40k cost saved" value="{{ req.phase_data('implementation').get('actual_l4', '') }}"></div>
+                    </div>
+                </div>
+                {% elif req.current_phase == 'evaluation' %}
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <p style="font-size:0.85rem; color:#666;">Evaluation data is recorded via the <strong>Kirkpatrick Results</strong> section below. This phase tracks overall completion of the evaluation cycle.</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">L1 Reaction Survey Completed?</label>
+                        <select name="l1_completed" class="form-select">
+                            <option value="No">No</option>
+                            <option value="Yes" {% if req.phase_data('evaluation').get('l1_completed')=='Yes' %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">L2 Learning Assessment Completed?</label>
+                        <select name="l2_completed" class="form-select">
+                            <option value="No">No</option>
+                            <option value="Yes" {% if req.phase_data('evaluation').get('l2_completed')=='Yes' %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">L3 Behaviour Observation Planned?</label>
+                        <select name="l3_planned" class="form-select">
+                            <option value="No">No</option>
+                            <option value="Yes" {% if req.phase_data('evaluation').get('l3_planned')=='Yes' %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">L4 Business Impact Assessed?</label>
+                        <select name="l4_assessed" class="form-select">
+                            <option value="No">No</option>
+                            <option value="Yes" {% if req.phase_data('evaluation').get('l4_assessed')=='Yes' %}selected{% endif %}>Yes</option>
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Lessons Learned</label>
+                        <textarea name="lessons_learned" class="form-control" rows="3">{{ req.phase_data('evaluation').get('lessons_learned', '') }}</textarea>
+                    </div>
+                </div>
+                {% elif req.current_phase == 'inbox' %}
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <p style="font-size:0.85rem; color:#666;">This request is in the <strong>Inbox</strong>. Triage it by assigning a priority and deciding if it goes through full ADDIE or is an Ad Hoc request.</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Triage Decision</label>
+                        <select name="triage_decision" class="form-select">
+                            <option value="Full ADDIE">Full ADDIE Cycle</option>
+                            <option value="Ad Hoc — Direct to Design/Development" {% if req.phase_data('inbox').get('triage_decision')=='Ad Hoc' %}selected{% endif %}>Ad Hoc — Direct to Design/Development</option>
+                            <option value="Referred — Not a learning intervention" {% if req.phase_data('inbox').get('triage_decision')=='Referred' %}selected{% endif %}>Referred — Not a learning intervention</option>
+                            <option value="Backlog — No current capacity" {% if req.phase_data('inbox').get('triage_decision')=='Backlog' %}selected{% endif %}>Backlog — No current capacity</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label" style="font-size:0.85rem; font-weight:600;">Assign To</label>
+                        <select name="assigned_to" class="form-select">
+                            <option value="">Unassigned</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}" {% if req.assigned_to_id == u.id %}selected{% endif %}>{{ u.name }} ({{ u.role }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% endif %}
+                    <div class="col-12 mt-3">
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Save Phase Data</button>
+                        {% if req.current_phase != 'inbox' and req.current_phase != 'evaluation' %}
+                        <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#blockerModal"><i class="bi bi-exclamation-triangle"></i> Log Blocker</button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- INTERVIEW GUIDE (Analysis section) -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-person-lines-fill"></i> Interview Guide — Stakeholder Input</div>
+            <div class="card-body">
+                {% if interviews %}
+                {% for iv in interviews %}
+                <div class="mb-3 p-3" style="background:#F8F9FA; border-radius:6px;">
+                    <div class="d-flex justify-content-between">
+                        <strong>{{ iv.stakeholder_name }}</strong>
+                        <span style="font-size:0.8rem; color:#999;">{{ iv.stakeholder_role }} · {{ iv.interview_date.strftime('%d %b %Y') }}</span>
+                    </div>
+                    <div style="font-size:0.8rem; margin-top:4px;">
+                        <strong>Questions:</strong> {{ iv.questions[:300] }}{% if iv.questions|length > 300 %}...{% endif %}
+                    </div>
+                    <div style="font-size:0.8rem; color:var(--green); margin-top:2px;">
+                        <strong>Key Findings:</strong> {{ iv.key_findings[:300] }}{% if iv.key_findings|length > 300 %}...{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <p style="font-size:0.85rem; color:#999;">No interviews recorded yet. Use the form below to capture stakeholder input.</p>
+                {% endif %}
+                <hr>
+                <form method="POST" action="{{ url_for('add_interview', req_id=req.id) }}" class="row g-2">
+                    <div class="col-md-4">
+                        <input type="text" name="stakeholder_name" class="form-control form-control-sm" placeholder="Stakeholder name" required>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" name="stakeholder_role" class="form-control form-control-sm" placeholder="Role" required>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="date" name="interview_date" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-md-12">
+                        <textarea name="questions" class="form-control form-control-sm" rows="2" placeholder="Key questions asked"></textarea>
+                    </div>
+                    <div class="col-md-12">
+                        <textarea name="key_findings" class="form-control form-control-sm" rows="2" placeholder="Key findings / insights gathered"></textarea>
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add Interview</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- APPROVALS -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-check2-square"></i> Approvals & Sign-off</div>
+            <div class="card-body">
+                {% if approvals %}
+                <div class="table-responsive">
+                    <table class="table table-sm" style="font-size:0.85rem;">
+                        <thead><tr><th>Phase</th><th>Approver</th><th>Status</th><th>Comments</th><th>Date</th></tr></thead>
+                        <tbody>
+                            {% for a in approvals %}
+                            <tr>
+                                <td><span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ a.phase_name|capitalize }}</span></td>
+                                <td>{{ a.approver_name or a.approver.name if a.approver else a.approver_name or '—' }}</td>
+                                <td><span class="phase-badge" style="background:{% if a.status=='Completed' %}#E8F5E9;color:#1E8445{% elif a.status=='Rejected' %}#FDEDEC;color:#C0392B{% elif a.status=='In Progress' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};">{{ a.status }}</span></td>
+                                <td style="font-size:0.8rem; color:#666;">{{ a.comments or '—' }}</td>
+                                <td style="font-size:0.8rem; color:#999;">{{ a.decided_at.strftime('%d %b') if a.decided_at else '—' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p style="font-size:0.85rem; color:#999;">No approvals requested yet.</p>
+                {% endif %}
+                {% if current_user.is_learning_expert() %}
+                <hr>
+                <form method="POST" action="{{ url_for('add_approval', req_id=req.id) }}" class="row g-2">
+                    <div class="col-md-4">
+                        <select name="phase_name" class="form-select form-select-sm">
+                            <option value="Analysis">Analysis</option>
+                            <option value="Design">Design</option>
+                            <option value="Development">Development</option>
+                            <option value="Implementation">Implementation</option>
+                            <option value="Evaluation">Evaluation</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <input type="text" name="approver_name" class="form-control form-control-sm" placeholder="Person name" required>
+                    </div>
+                    <div class="col-md-2">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus"></i> Add</button>
+                    </div>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- LEARNING STATISTICS -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clipboard-data"></i> Learning Statistics — Uploaded by CSV</span>
+                <a href="{{ url_for('cohorts_for_request', req_id=req.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-people-fill"></i> Manage Cohorts</a>
+            </div>
+            <div class="card-body">
+                {% set stats = req.learning_stats.all() %}
+                {% if stats %}
+                <div class="row g-2 mb-3">
+                    <div class="col-3"><div class="p-2 text-center" style="background:#E8F0F8;border-radius:6px;"><strong style="font-size:1.2rem;color:var(--accent);">{{ stats|length }}</strong><br><small style="color:#999;">Learners</small></div></div>
+                    <div class="col-3"><div class="p-2 text-center" style="background:#E8F5E9;border-radius:6px;"><strong style="font-size:1.2rem;color:var(--green);">{{ req.avg_completion_pct() }}%</strong><br><small style="color:#999;">Avg Completion</small></div></div>
+                    <div class="col-3"><div class="p-2 text-center" style="background:#FDF2E0;border-radius:6px;"><strong style="font-size:1.2rem;color:var(--gold);">{{ req.avg_score() }}%</strong><br><small style="color:#999;">Avg Score</small></div></div>
+                    <div class="col-3"><div class="p-2 text-center" style="background:#D4E6F1;border-radius:6px;"><strong style="font-size:1.2rem;color:var(--teal);">{{ req.cohorts|length }}</strong><br><small style="color:#999;">Cohorts</small></div></div>
+                </div>
+                <form method="POST" action="{{ url_for('move_stats_to_cohort', req_id=req.id) }}" id="move-stats-form">
+                <div class="table-responsive" style="max-height:250px;overflow-y:auto;">
+                    <table class="table table-sm" style="font-size:0.8rem;">
+                        <thead><tr>
+                            <th style="width:30px;"><input type="checkbox" id="select-all-stats" onclick="document.querySelectorAll('.stat-checkbox').forEach(c=>c.checked=this.checked)"></th>
+                            <th>Learner</th><th>Status</th><th>%</th><th>Score</th><th>Passed</th><th>Cohort</th><th style="width:65px;"></th>
+                        </tr></thead>
+                        <tbody>
+                            {% for s in stats %}
+                            <tr id="stat-row-{{ s.id }}">
+                                <td><input type="checkbox" name="stat_ids" value="{{ s.id }}" class="stat-checkbox"></td>
+                                <td>{{ s.learner_name or s.learner_email or '—' }}</td>
+                                <td><span class="phase-badge" style="background:{% if s.completion_status=='Completed' %}#E8F5E9;color:#1E8445{% elif s.completion_status=='In Progress' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};">{{ s.completion_status }}</span></td>
+                                <td>{{ '%.0f'|format(s.completion_pct or 0) }}%</td>
+                                <td>{{ '%.0f'|format(s.score or 0) }}%</td>
+                                <td>{% if s.passed %}<span class="phase-badge" style="background:#E8F5E9;color:#1E8445;">✓</span>{% elif s.passed is not none %}<span class="phase-badge" style="background:#FDEDEC;color:var(--red);">✗</span>{% else %}—{% endif %}</td>
+                                <td>{% if s.cohort %}<span class="phase-badge" style="background:#E8F0F8;color:var(--accent);font-size:0.65rem;">{{ s.cohort.name }}</span>{% else %}<span style="color:#999;font-size:0.7rem;">—</span>{% endif %}</td>
+                                <td>
+                                    <button class="btn btn-outline-primary btn-sm py-0 px-1" onclick="editStat({{ s.id }})" title="Edit"><i class="bi bi-pencil"></i></button>
+                                    <form method="POST" action="{{ url_for('delete_learning_stat', stat_id=s.id) }}" style="display:inline;" onsubmit="return confirm('Delete this learner record?')">
+                                        <button class="btn btn-outline-danger btn-sm py-0 px-1"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% if cohorts_list %}
+                <div class="d-flex align-items-center gap-2 mt-2">
+                    <span style="font-size:0.8rem;color:#666;">Move selected to:</span>
+                    <select name="cohort_id" class="form-select form-select-sm" style="width:200px;">
+                        <option value="">— Select Cohort —</option>
+                        {% for c in cohorts_list %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-arrow-right"></i> Move</button>
+                </div>
+                {% endif %}
+                </form>
+                {% else %}
+                <p style="font-size:0.85rem;color:#999;">No learning statistics uploaded yet.</p>
+                {% endif %}
+                <hr>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('download_stats_template', req_id=req.id) }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Download CSV Template</a>
+                    <form method="POST" action="{{ url_for('upload_stats', req_id=req.id) }}" enctype="multipart/form-data" class="d-flex gap-1">
+                        <input type="file" name="file" class="form-control form-control-sm" accept=".csv" required style="width:160px;">
+                        <button class="btn btn-primary btn-sm"><i class="bi bi-upload"></i> Upload</button>
+                    </form>
+                </div>
+                {% if batches %}
+                <div style="font-size:0.75rem;color:#999;margin-top:4px;">Last upload: {{ batches[0].file_name }} ({{ batches[0].rows_imported }} rows, {{ batches[0].uploaded_at.strftime('%d %b %H:%M') if batches[0].uploaded_at else '' }})</div>
+                {% endif %}
+            </div>
+        </div>
+
+    </div><!-- end left column -->
+
+    <!-- RIGHT: META & ACTIONS -->
+    <div class="col-md-4">
+
+        <!-- ESCALATION -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-arrow-up-circle" style="color:var(--red);"></i> Escalation</div>
+            <div class="card-body">
+                {% if req.escalation_level > 0 %}
+                <div class="escalation-indicator mb-2">
+                    <strong>Escalation Level {{ req.escalation_level }}</strong><br>
+                    {{ req.escalation_note or 'No details' }}
+                </div>
+                {% endif %}
+                <form method="POST" action="{{ url_for('escalate_request', req_id=req.id) }}">
+                    <div class="mb-2">
+                        <textarea name="escalation_note" class="form-control form-control-sm" rows="2" placeholder="Reason for escalation"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-outline-danger btn-sm w-100"><i class="bi bi-arrow-up-circle"></i> Escalate</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- LINKS: Review + LMS -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-link-45deg"></i> Course Links</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('save_links', req_id=req.id) }}">
+                    <div class="mb-2">
+                        <label style="font-size:0.75rem;color:#666;">🔍 Articulate Review Link (SME Review)</label>
+                        <input type="url" name="review_link" class="form-control form-control-sm" placeholder="https://360.articulate.com/review/..." value="{{ req.phase_data('development').get('review_link', '') }}">
+                    </div>
+                    <div class="mb-2">
+                        <label style="font-size:0.75rem;color:#666;">🎓 LMS Course URL</label>
+                        <input type="url" name="lms_course_link" class="form-control form-control-sm" placeholder="https://stanlib.learn.com/course/..." value="{{ req.phase_data('implementation').get('lms_course_link', '') }}">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-save"></i> Save Links</button>
+                </form>
+                {% if req.phase_data('development').get('review_link') %}
+                <div class="mt-2"><a href="{{ req.phase_data('development').get('review_link') }}" target="_blank" class="btn btn-outline-primary btn-sm w-100"><i class="bi bi-box-arrow-up-right"></i> Open Review Link</a></div>
+                {% endif %}
+                {% if req.phase_data('implementation').get('lms_course_link') %}
+                <div class="mt-1"><a href="{{ req.phase_data('implementation').get('lms_course_link') }}" target="_blank" class="btn btn-outline-success btn-sm w-100"><i class="bi bi-box-arrow-up-right"></i> Open LMS Course</a></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- KIRKPATRICK ACTUAL (editable at any time) -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-bar-chart"></i> Kirkpatrick Actual Results</div>
+            <div class="card-body">
+                {% set proj = req.phase_data('analysis') %}
+                {% set actual = req.phase_data('evaluation') %}
+                <form method="POST" action="{{ url_for('save_kirkpatrick', req_id=req.id) }}">
+                    <div class="mb-2">
+                        <label style="font-size:0.75rem;color:#666;">L1 — Reaction <span style="color:#999;font-weight:400;">(target: {{ proj.get('projected_l1', '—') }})</span></label>
+                        <input type="text" name="actual_l1" class="form-control form-control-sm" placeholder="e.g. 4.2/5" value="{{ actual.get('actual_l1', '') }}">
+                    </div>
+                    <div class="mb-2">
+                        <label style="font-size:0.75rem;color:#666;">L2 — Avg Score % <span style="color:#999;font-weight:400;">(target: {{ proj.get('projected_l2', '—') }} · from stats: {{ req.avg_score() }}%)</span></label>
+                        <input type="text" name="actual_l2" class="form-control form-control-sm" placeholder="Auto-calculated from uploaded stats" value="{{ actual.get('actual_l2', '') }}">
+                    </div>
+                    <div class="mb-2">
+                        <label style="font-size:0.75rem;color:#666;">L3 — Behaviour Change <span style="color:#999;font-weight:400;">(target: {{ proj.get('projected_l3', '—') }})</span></label>
+                        <input type="text" name="actual_l3" class="form-control form-control-sm" placeholder="e.g. 65% observed" value="{{ actual.get('actual_l3', '') }}">
+                    </div>
+                    <div class="mb-2">
+                        <label style="font-size:0.75rem;color:#666;">L4 — Business Impact <span style="color:#999;font-weight:400;">(target: {{ proj.get('projected_l4', '—') }})</span></label>
+                        <input type="text" name="actual_l4" class="form-control form-control-sm" placeholder="e.g. R40k saved" value="{{ actual.get('actual_l4', '') }}">
+                    </div>
+                    <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-save"></i> Save Actual Results</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- BLOCKER FORM (Modal trigger) -->
+        <div class="modal fade" id="blockerModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <form method="POST" action="{{ url_for('set_blocker', req_id=req.id, phase_name=req.current_phase) }}">
+                        <div class="modal-header">
+                            <h5 class="modal-title" style="font-size:0.95rem;">Log Blocker</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <label class="form-label" style="font-size:0.85rem;">Current Phase: {{ req.current_phase|capitalize }}</label>
+                            <textarea name="blocker" class="form-control" rows="3" required placeholder="What is blocking progress? (e.g. waiting on SME input, content not approved, technical issue)"></textarea>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="submit" class="btn btn-danger btn-sm">Log Blocker</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- REQUEST DETAILS -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-info-circle"></i> Request Details</div>
+            <div class="card-body" style="font-size:0.85rem;">
+                <div class="mb-2"><strong>Description:</strong><br>{{ req.description or '—' }}</div>
+                <div class="mb-2"><strong>Business Need:</strong><br>{{ req.business_need or '—' }}</div>
+                <div class="mb-2"><strong>Expected Outcome:</strong><br>{{ req.expected_outcome or '—' }}</div>
+                <div class="mb-2"><strong>Target Audience:</strong> {{ req.target_audience or '—' }}</div>
+                <div class="mb-2"><strong>Est. Learners:</strong> {{ req.estimated_learners or '—' }}</div>
+                <div class="mb-2"><strong>Deadline:</strong> {{ req.deadline.strftime('%d %b %Y') if req.deadline else '—' }}</div>
+                <div class="mb-2"><strong>Ad Hoc:</strong> {{ 'Yes' if req.is_adhoc else 'No' }}</div>
+                {% if req.assigned_to %}
+                <div class="mb-2"><strong>Assigned To:</strong> {{ req.assigned_to.name }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- CONTENT TAGS -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-tags"></i> Content Tags</div>
+            <div class="card-body">
+                {% if tags %}
+                {% for t in tags %}
+                <span class="phase-badge" style="background:#E8F0F8;color:var(--accent); margin:2px;">{{ t.tag }}</span>
+                {% endfor %}
+                {% else %}
+                <p style="font-size:0.85rem; color:#999;">No tags yet. Tag content for reuse across programmes.</p>
+                {% endif %}
+                <hr>
+                <form method="POST" action="{{ url_for('add_tag', req_id=req.id) }}" class="row g-1">
+                    <div class="col-8">
+                        <input type="text" name="tag" class="form-control form-control-sm" placeholder="e.g. compliance">
+                    </div>
+                    <div class="col-4">
+                        <button type="submit" class="btn btn-primary btn-sm w-100">Add</button>
+                    </div>
+                </form>
+                <div style="font-size:0.75rem; color:#999; margin-top:4px;">
+                    Suggested: onboarding · capability-academy · contractor · ifa · compliance · systems
+                </div>
+            </div>
+        </div>
+
+        <!-- QUICK PHASE NAV -->
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-lightning"></i> Quick Actions</div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    {% for key, label in [('analysis','Start Analysis'),('design','Start Design'),('development','Start Development'),('implementation','Start Implementation'),('evaluation','Start Evaluation')] %}
+                    {% if req.current_phase != key %}
+                    <form method="POST" action="{{ url_for('start_phase', req_id=req.id, phase_name=key) }}">
+                        <button type="submit" class="btn btn-outline-secondary btn-sm w-100">→ {{ label }}</button>
+                    </form>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Stat Modal -->
+<div class="modal fade" id="editStatModal" tabindex="-1">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+        <form method="POST" id="editStatForm">
+            <div class="modal-header"><h5 class="modal-title">Edit Learner Record</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="row g-2">
+                    <div class="col-md-6"><label style="font-size:0.85rem;">Learner Name</label><input type="text" name="learner_name" id="edit-name" class="form-control"></div>
+                    <div class="col-md-6"><label style="font-size:0.85rem;">Email</label><input type="text" name="learner_email" id="edit-email" class="form-control"></div>
+                    <div class="col-md-4"><label style="font-size:0.85rem;">Department</label><input type="text" name="department" id="edit-dept" class="form-control"></div>
+                    <div class="col-md-4">
+                        <label style="font-size:0.85rem;">Status</label>
+                        <select name="completion_status" id="edit-status" class="form-select">
+                            <option value="Not Started">Not Started</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label style="font-size:0.85rem;">Passed?</label>
+                        <select name="passed" id="edit-passed" class="form-select">
+                            <option value="">—</option>
+                            <option value="TRUE">Yes</option>
+                            <option value="FALSE">No</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3"><label style="font-size:0.85rem;">Completion %</label><input type="number" name="completion_pct" id="edit-pct" class="form-control" step="0.1"></div>
+                    <div class="col-md-3"><label style="font-size:0.85rem;">Score</label><input type="number" name="score" id="edit-score" class="form-control" step="0.1"></div>
+                    <div class="col-md-3"><label style="font-size:0.85rem;">Time Spent (min)</label><input type="number" name="time_spent_minutes" id="edit-time" class="form-control"></div>
+                    <div class="col-md-3"><label style="font-size:0.85rem;">Attempts</label><input type="number" name="assessment_attempts" id="edit-attempts" class="form-control"></div>
+                </div>
+            </div>
+            <div class="modal-footer"><button type="submit" class="btn btn-primary">Save</button></div>
+        </form>
+    </div></div>
+</div>
+
+<script>
+var statData = {};
+{% for s in req.learning_stats.all() %}
+statData[{{ s.id }}] = {
+    name: "{{ s.learner_name or '' }}",
+    email: "{{ s.learner_email or '' }}",
+    dept: "{{ s.department or '' }}",
+    status: "{{ s.completion_status or 'Not Started' }}",
+    pct: {{ s.completion_pct or 0 }},
+    score: {{ s.score or 0 }},
+    time: {{ s.time_spent_minutes or 0 }},
+    attempts: {{ s.assessment_attempts or 0 }},
+    passed: "{{ 'TRUE' if s.passed else 'FALSE' if s.passed is not none else '' }}"
+};
+{% endfor %}
+function editStat(id) {
+    var d = statData[id];
+    document.getElementById('edit-name').value = d.name;
+    document.getElementById('edit-email').value = d.email;
+    document.getElementById('edit-dept').value = d.dept;
+    document.getElementById('edit-status').value = d.status;
+    document.getElementById('edit-pct').value = d.pct;
+    document.getElementById('edit-score').value = d.score;
+    document.getElementById('edit-time').value = d.time;
+    document.getElementById('edit-attempts').value = d.attempts;
+    document.getElementById('edit-passed').value = d.passed;
+    document.getElementById('editStatForm').action = '/stats/' + id + '/edit';
+    new bootstrap.Modal(document.getElementById('editStatModal')).show();
+}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% endblock %}

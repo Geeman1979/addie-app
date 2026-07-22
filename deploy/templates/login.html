@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-5">
+        <div class="card shadow-sm">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <h4 style="color:var(--navy); font-weight:700;">ADDIE Application</h4>
+                    <p style="color:#999; font-size:0.85rem;">Stanlib / INN8 Learning Strategy</p>
+                </div>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Email</label>
+                        <input type="email" name="email" class="form-control" required placeholder="email@stanlib.co.za">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" style="font-size:0.85rem;">Password</label>
+                        <input type="password" name="password" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Sign In</button>
+                </form>
+                <hr style="margin:1.5rem 0;">
+                <div style="font-size:0.8rem; color:#999;">
+                    <strong>Demo Accounts:</strong><br>
+                    admin@addie.app / admin123 — Learning Expert (full access)<br>
+                    manager@addie.app / manager123 — Manager (limited access)<br>
+                    hlengiwe@addie.app / expert123 — Learning Specialist
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

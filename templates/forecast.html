@@ -1,0 +1,107 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-bar-chart-steps"></i> Resource Forecast</h4>
+<p style="color:#666;font-size:0.85rem;">Forecast resource availability and allocation by person, by week. Manage planned view for the ADDIE cycle.</p>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <div class="card"><div class="card-header"><i class="bi bi-plus"></i> Add Forecast Entry</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_forecast') }}" class="row g-2">
+                    <div class="col-12">
+                        <select name="user_id" class="form-select form-select-sm" required>
+                            <option value="">— Team Member —</option>
+                            {% for u in users %}<option value="{{ u.id }}">{{ u.name }} ({{ u.role }})</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <select name="request_id" class="form-select form-select-sm">
+                            <option value="">— All requests (general) —</option>
+                            {% for r in requests %}<option value="{{ r.id }}">{{ r.title[:50] }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6"><input type="date" name="week_start" class="form-control form-control-sm" required></div>
+                    <div class="col-6"><input type="date" name="week_end" class="form-control form-control-sm" required></div>
+                    <div class="col-6">
+                        <label style="font-size:0.75rem;color:#999;">Availability %</label>
+                        <input type="number" name="availability_pct" class="form-control form-control-sm" value="100" min="0" max="100">
+                    </div>
+                    <div class="col-6">
+                        <label style="font-size:0.75rem;color:#999;">Allocated %</label>
+                        <input type="number" name="allocated_pct" class="form-control form-control-sm" value="0" min="0" max="100">
+                    </div>
+                    <div class="col-12">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="Forecasted">Forecasted</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="col-12"><textarea name="notes" class="form-control form-control-sm" rows="2" placeholder="Notes on this forecast"></textarea></div>
+                    <div class="col-12"><button class="btn btn-primary btn-sm w-100">Add Forecast</button></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Summary cards -->
+        <div class="card mt-3"><div class="card-header"><i class="bi bi-pie-chart"></i> Quick Summary</div>
+            <div class="card-body" style="font-size:0.85rem;">
+                {% set total = forecasts|length %}
+                {% set confirmed = forecasts|selectattr('status','equalto','Confirmed')|list|length %}
+                {% set forecasted = forecasts|selectattr('status','equalto','Forecasted')|list|length %}
+                {% set avg_avail = forecasts|sum(attribute='availability_pct') / total if total > 0 else 0 %}
+                <div class="row g-1 text-center">
+                    <div class="col-4"><div class="p-2" style="background:#E8F0F8;border-radius:4px;"><strong style="font-size:1.2rem;">{{ total }}</strong><br><small style="color:#999;">Entries</small></div></div>
+                    <div class="col-4"><div class="p-2" style="background:#E8F5E9;border-radius:4px;"><strong style="font-size:1.2rem;">{{ confirmed }}</strong><br><small style="color:#999;">Confirmed</small></div></div>
+                    <div class="col-4"><div class="p-2" style="background:#FDEBD0;border-radius:4px;"><strong style="font-size:1.2rem;">{{ '%.0f'|format(avg_avail) }}%</strong><br><small style="color:#999;">Avg. Avail</small></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card"><div class="card-header"><i class="bi bi-table"></i> Forecasted View — People × Weeks</div>
+            <div class="card-body p-0">
+                {% if forecasts %}
+                {% set current_user_id = namespace(last=None) %}
+                {% for f in forecasts|sort(attribute='user_id') %}
+                {% if f.user_id != current_user_id.last %}
+                {% set current_user_id.last = f.user_id %}
+                <div style="padding:6px 12px;background:var(--navy);color:#fff;font-weight:600;font-size:0.85rem;">
+                    <i class="bi bi-person-circle"></i> {{ f.user.name if f.user else 'Unknown' }}
+                </div>
+                {% endif %}
+                <div class="p-2" style="border-bottom:1px solid #eee;border-left:4px solid {% if f.allocated_pct > f.availability_pct %}#C0392B{% elif f.allocated_pct > 50 %}#E69E2E{% else %}#2E86AB{% endif %};font-size:0.85rem;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ f.week_start.strftime('%d %b') }} — {{ f.week_end.strftime('%d %b') }}</strong>
+                            {% if f.request %}<span class="phase-badge ms-2" style="background:#E8F0F8;color:var(--accent);font-size:0.7rem;">{{ f.request.title[:30] }}</span>{% endif %}
+                            <span class="phase-badge ms-1" style="background:{% if f.status=='Confirmed' %}#E8F5E9;color:#1E8445{% elif f.status=='Forecasted' %}#FDEBD0;color:#CC7A29{% else %}#f0f0f0;color:#999{% endif %};font-size:0.7rem;">{{ f.status }}</span>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="text-align:right;">
+                                <div style="font-size:0.75rem;color:#999;">Available: <strong>{{ '%.0f'|format(f.availability_pct) }}%</strong></div>
+                                <div style="font-size:0.75rem;color:#999;">Allocated: <strong>{{ '%.0f'|format(f.allocated_pct) }}%</strong></div>
+                            </div>
+                            <div class="progress" style="width:80px;height:16px;">
+                                <div class="progress-bar" role="progressbar" style="width:{{ f.availability_pct }}%;background:var(--accent);" aria-valuenow="{{ f.availability_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                                <div class="progress-bar" role="progressbar" style="width:{{ f.allocated_pct }}%;background:var(--gold);" aria-valuenow="{{ f.allocated_pct }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                            {% if f.allocated_pct > f.availability_pct %}
+                            <span class="phase-badge" style="background:#FDEDEC;color:var(--red);font-size:0.65rem;">OVER</span>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('delete_forecast', fid=f.id) }}" onsubmit="return confirm('Delete this forecast?')">
+                                <button class="btn btn-outline-danger btn-sm py-0 px-1"><i class="bi bi-x"></i></button>
+                            </form>
+                        </div>
+                    </div>
+                    {% if f.notes %}<div style="font-size:0.75rem;color:#999;margin-top:2px;">{{ f.notes }}</div>{% endif %}
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="text-center py-5" style="color:#999;"><i class="bi bi-calendar" style="font-size:2rem;display:block;margin-bottom:8px;"></i>No forecasts yet. Add one on the left panel.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

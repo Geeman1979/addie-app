@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: addie
+      POSTGRES_USER: addie_user
+      POSTGRES_PASSWORD: addie_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U addie_user -d addie"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      DATABASE_URL: "postgresql://addie_user:addie_pass@db:5432/addie"
+      FLASK_ENV: production
+      SECRET_KEY: stanlib-addie-secret-key-2026
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    command: >
+      sh -c "chmod +x boot.sh && ./boot.sh"
+
+volumes:
+  postgres_data:

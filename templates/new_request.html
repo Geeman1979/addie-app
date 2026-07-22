@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color:var(--navy); font-weight:700;"><i class="bi bi-plus-lg"></i> New Learning Request</h4>
+    <a href="{{ url_for('request_list') }}" class="btn btn-outline-secondary btn-sm">← Back</a>
+</div>
+<div class="card">
+    <div class="card-body">
+        <form method="POST">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label class="form-label" style="font-size:0.85rem; font-weight:600;">Request Type *</label>
+                    <div class="d-flex gap-3">
+                        <div class="form-check">
+                            <input type="radio" name="request_type" value="planned" class="form-check-input" id="rt-planned" checked>
+                            <label class="form-check-label" for="rt-planned">
+                                <span class="phase-badge" style="background:var(--accent); color:#fff;">📋 Planned</span>
+                                Part of an LNA budget cycle — goes through full ADDIE process
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input type="radio" name="request_type" value="adhoc" class="form-check-input" id="rt-adhoc">
+                            <label class="form-check-label" for="rt-adhoc">
+                                <span class="phase-badge" style="background:var(--red); color:#fff;">⚡ Ad Hoc</span>
+                                Quick turnaround, may skip full Analysis
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-8">
+                    <label class="form-label" style="font-size:0.85rem;">Request Title *</label>
+                    <input type="text" name="title" class="form-control" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:0.85rem;">Priority *</label>
+                    <select name="priority" class="form-select" required>
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium" selected>Medium</option>
+                        <option value="Low">Low</option>
+                        <option value="Backlog">Backlog</option>
+                    </select>
+                </div>
+
+                <!-- LNA Cycle (shown for Planned requests) -->
+                <div class="col-md-6" id="lna-cycle-group">
+                    <label class="form-label" style="font-size:0.85rem;">LNA Budget Cycle</label>
+                    <select name="lna_cycle_id" class="form-select">
+                        <option value="">— No cycle —</option>
+                        {% for c in cycles %}
+                        <option value="{{ c.id }}">{{ c.name }} ({{ c.start_date.strftime('%b %Y') }} — {{ c.end_date.strftime('%b %Y') }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" style="font-size:0.85rem;">Requester Name</label>
+                    <input type="text" name="requester_name" class="form-control" placeholder="e.g. John Smith">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" style="font-size:0.85rem;">Department</label>
+                    <input type="text" name="requester_department" class="form-control" placeholder="e.g. Operations">
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label" style="font-size:0.85rem;">Description *</label>
+                    <textarea name="description" class="form-control" rows="3" required placeholder="What is the request? What problem are we solving?"></textarea>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label" style="font-size:0.85rem;">Business Need / Problem Statement</label>
+                    <textarea name="business_need" class="form-control" rows="2" placeholder="Why is this needed? What business risk or opportunity does it address?"></textarea>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label" style="font-size:0.85rem;">Expected Outcome</label>
+                    <textarea name="expected_outcome" class="form-control" rows="2" placeholder="What will be different after this intervention?"></textarea>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:0.85rem;">Target Audience</label>
+                    <input type="text" name="target_audience" class="form-control" placeholder="e.g. Ops team, IFAs">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:0.85rem;">Estimated Learners</label>
+                    <input type="number" name="estimated_learners" class="form-control" placeholder="e.g. 150">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:0.85rem;">Assigned To <span style="color:var(--red);">*</span></label>
+                    <select name="assigned_to_id" class="form-select" required>
+                        <option value="">— Select Learning Person —</option>
+                        {% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label" style="font-size:0.85rem;">Deadline</label>
+                    <input type="date" name="deadline" class="form-control">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label" style="font-size:0.85rem;">Projected ROI (Rands saved / value)</label>
+                    <input type="number" name="projected_roi" class="form-control" step="0.01" placeholder="e.g. 50000">
+                </div>
+
+                <div class="col-12">
+                    <hr>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-send"></i> Submit Request</button>
+                    <a href="{{ url_for('request_list') }}" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+// Toggle LNA cycle field based on request type
+document.querySelectorAll('input[name="request_type"]').forEach(function(el) {
+    el.addEventListener('change', function() {
+        var group = document.getElementById('lna-cycle-group');
+        if (this.value === 'planned') {
+            group.style.display = 'block';
+        } else {
+            group.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock %}

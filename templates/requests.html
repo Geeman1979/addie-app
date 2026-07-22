@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 style="color:var(--navy); font-weight:700;"><i class="bi bi-inbox"></i> Interventions</h4>
+    <div class="d-flex gap-1">
+        <a href="{{ url_for('export_request_list', fmt='xlsx') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+        <a href="{{ url_for('export_request_list', fmt='csv') }}" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> CSV</a>
+        <a href="{{ url_for('new_request') }}" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg"></i> New Intervention</a>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <form method="GET" class="row g-2 align-items-center">
+            <div class="col-auto"><span style="font-size:0.85rem; color:#666;">Search/Filter:</span></div>
+            <div class="col-md-4">
+                <input type="text" name="search" class="form-control form-control-sm" placeholder="🔍 Search by title, department, or requester..." value="{{ search_query or '' }}">
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="all" {% if status_filter=='all' %}selected{% endif %}>All Statuses</option>
+                    <option value="New" {% if status_filter=='New' %}selected{% endif %}>New</option>
+                    <option value="In Analysis" {% if status_filter=='In Analysis' %}selected{% endif %}>In Analysis</option>
+                    <option value="In Design" {% if status_filter=='In Design' %}selected{% endif %}>In Design</option>
+                    <option value="In Development" {% if status_filter=='In Development' %}selected{% endif %}>In Development</option>
+                    <option value="In Implementation" {% if status_filter=='In Implementation' %}selected{% endif %}>In Implementation</option>
+                    <option value="In Evaluation" {% if status_filter=='In Evaluation' %}selected{% endif %}>In Evaluation</option>
+                    <option value="Completed" {% if status_filter=='Completed' %}selected{% endif %}>Completed</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="priority" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="all" {% if priority_filter=='all' %}selected{% endif %}>All Priorities</option>
+                    <option value="Critical" {% if priority_filter=='Critical' %}selected{% endif %}>Critical</option>
+                    <option value="High" {% if priority_filter=='High' %}selected{% endif %}>High</option>
+                    <option value="Medium" {% if priority_filter=='Medium' %}selected{% endif %}>Medium</option>
+                    <option value="Low" {% if priority_filter=='Low' %}selected{% endif %}>Low</option>
+                    <option value="Backlog" {% if priority_filter=='Backlog' %}selected{% endif %}>Backlog</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search"></i></button>
+                <a href="{{ url_for('request_list') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-x"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% for req in requests %}
+<div class="card mb-2 priority-{{ req.priority.lower() }}" style="border-left: 4px solid 
+{%- if req.priority == 'Critical' %}#C0392B{% elif req.priority == 'High' %}#E69E2E{% elif req.priority == 'Medium' %}#2E86AB{% else %}#999{% endif %};">
+    <div class="card-body py-2" style="padding-left:0.75rem; padding-right:0.75rem; cursor:pointer;" onclick="window.location='{{ url_for('request_detail', req_id=req.id) }}'">
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <div style="font-weight:600; font-size:0.95rem; color:var(--navy);">{{ req.title }}
+                    {% if current_user.is_learning_expert() %}<a href="#" class="text-decoration-none ms-1" style="font-size:0.7rem;color:#999;" onclick="event.stopPropagation();document.getElementById('edit-{{ req.id }}').classList.toggle('d-none');return false;" title="Edit title"><i class="bi bi-pencil"></i></a>{% endif %}
+                    <form id="edit-{{ req.id }}" method="POST" action="{{ url_for('edit_request_title', req_id=req.id) }}" class="d-none mt-1" style="display:inline-flex !important;" onsubmit="event.stopPropagation();">
+                        <input type="text" name="title" class="form-control form-control-sm" value="{{ req.title }}" style="width:300px;font-size:0.8rem;" required onclick="event.stopPropagation();">
+                        <button type="submit" class="btn btn-success btn-sm py-0 px-1 ms-1" style="font-size:0.7rem;" onclick="event.stopPropagation();"><i class="bi bi-check"></i></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm py-0 px-1 ms-1" style="font-size:0.7rem;" onclick="event.stopPropagation();this.closest('form').classList.add('d-none');return false;"><i class="bi bi-x"></i></button>
+                    </form>
+                </div>
+                <div style="font-size:0.8rem; color:#666; margin-top:2px;">
+                    {% if req.requester_name %}{{ req.requester_name }} · {% endif %}
+                    {% if req.requester_department %}{{ req.requester_department }} · {% endif %}
+                    {{ req.created_at.strftime('%d %b %Y') }}
+                    {% if req.deadline %} · Due: {{ req.deadline.strftime('%d %b') }}{% endif %}
+                    {% if req.assigned_to %} · <i class="bi bi-person-check"></i> <strong>{{ req.assigned_to.name }}{% endif %}</strong>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="phase-badge" style="background:
+                {%- if req.priority == 'Critical' %}#FDEDEC;color:#C0392B
+                {%- elif req.priority == 'High' %}#FDEBD0;color:#CC7A29
+                {%- elif req.priority == 'Medium' %}#E8F0F8;color:#2E86AB
+                {%- else %}#f0f0f0;color:#666{% endif %}">
+                {{ req.priority }}
+                </span>
+                <span class="phase-badge" style="background:
+                {%- if req.status == 'Completed' %}#E8F5E9;color:#1E8445
+                {%- elif 'In ' in req.status %}#FDEBD0;color:#CC7A29
+                {%- else %}#f0f0f0;color:#666{% endif %}">
+                {{ req.status }}
+                </span>
+                <span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">
+                    <i class="bi bi-diagram-3"></i> {{ req.current_phase|capitalize }}
+                </span>
+                {% if req.escalation_level > 0 %}
+                <span class="phase-badge" style="background:#FDEDEC;color:var(--red);">
+                    <i class="bi bi-arrow-up-circle"></i> L{{ req.escalation_level }}
+                </span>
+                {% endif %}
+                {% if req.is_adhoc %}
+                <span class="phase-badge" style="background:#FDEDEC;color:var(--red);">⚡ AD HOC</span>
+                {% elif req.request_type == 'planned' %}
+                <span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">📋 Planned</span>
+                {% else %}
+                <span class="phase-badge" style="background:#FDEDEC;color:var(--red);">⚡ {{ req.request_type|title }}</span>
+                {% endif %}
+            </div>
+        </div>
+        {% if req.description %}
+        <div style="font-size:0.8rem; color:#999; margin-top:4px;">{{ req.description[:200] }}{% if req.description|length > 200 %}...{% endif %}</div>
+        {% endif %}
+        <div class="d-flex justify-content-between align-items-center mt-1">
+            <div>
+            {% set stat_count = req.learning_stats.count() %}
+            {% if stat_count > 0 %}
+            <span class="phase-badge" style="background:#E8F5E9;color:#1E8445;font-size:0.7rem;">
+                <i class="bi bi-clipboard-data"></i> {{ stat_count }} learning records · {{ req.avg_completion_pct() }}% avg · {{ req.avg_score() }}% avg score
+            </span>
+            {% set cohorts_count = req.cohorts|length %}
+            {% if cohorts_count > 0 %}
+            <span class="phase-badge" style="background:#E8F0F8;color:var(--accent);font-size:0.7rem;">
+                <i class="bi bi-people-fill"></i> {{ cohorts_count }} cohorts
+            </span>
+            {% endif %}
+            {% else %}
+            <span class="phase-badge" style="background:#f0f0f0;color:#999;font-size:0.7rem;">
+                <i class="bi bi-clipboard-data"></i> No learning records yet
+            </span>
+            {% endif %}
+            </div>
+        </div>
+        {% set p = req.phase_status(req.current_phase) %}
+        {% set pct = {'Inbox':0,'Analysis':10,'Design':30,'Development':50,'Implementation':70,'Evaluation':85,'Completed':100}.get(req.current_phase|capitalize, 0) %}
+        <div class="progress progress-thin mt-2" style="height:3px;">
+            <div class="progress-bar" style="width:{{ pct }}%; background:{% if req.priority=='Critical' %}#C0392B{% elif req.priority=='High' %}#E69E2E{% elif req.priority=='Medium' %}#2E86AB{% else %}#999{% endif %};"></div>
+        </div>
+        {% if req.review_status == 'Pending' and current_user.is_learning_expert() %}
+        <div class="mt-2 d-flex gap-1">
+            <form method="POST" action="{{ url_for('review_request', req_id=req.id) }}" style="display:inline-flex;gap:4px;align-items:center;flex:1;" onclick="event.stopPropagation();">
+                <input type="text" name="review_comment" class="form-control form-control-sm" placeholder="Reason (optional)" style="font-size:0.7rem;flex:1;" maxlength="200">
+                <button type="submit" name="review_action" value="Accepted" class="btn btn-success btn-sm py-0" style="font-size:0.7rem;"><i class="bi bi-check-lg"></i> Accept</button>
+                <button type="submit" name="review_action" value="Rejected" class="btn btn-danger btn-sm py-0" style="font-size:0.7rem;"><i class="bi bi-x-lg"></i> Reject</button>
+            </form>
+        </div>
+        {% elif req.review_status == 'Rejected' %}
+        <div class="mt-1">
+            <span class="phase-badge" style="background:#FDEDEC;color:#C0392B;">Rejected</span>
+            {% if req.review_comment %}<small style="color:#999;font-size:0.7rem;margin-left:4px;">{{ req.review_comment[:80] }}</small>{% endif %}
+            {% if current_user.is_learning_expert() %}
+            <form method="POST" action="{{ url_for('review_request', req_id=req.id) }}" style="display:inline;" onclick="event.stopPropagation();">
+                <input type="hidden" name="review_comment" value="Re-opened">
+                <button type="submit" name="review_action" value="Accepted" class="btn btn-outline-success btn-sm py-0" style="font-size:0.65rem;"><i class="bi bi-arrow-counterclockwise"></i> Re-Open</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endif %}
+        <div class="text-end mt-1">
+            <form method="POST" action="{{ url_for('assign_request', req_id=req.id) }}" style="display:inline-flex;align-items:center;gap:4px;" onclick="event.stopPropagation();">
+                <select name="assigned_to_id" class="form-select form-select-sm" style="width:140px;font-size:0.7rem;" id="assign-{{ req.id }}" {% if not current_user.is_learning_expert() %}disabled{% endif %}>
+                    <option value="">Unassigned</option>
+                    {% for u in users %}<option value="{{ u.id }}" {% if req.assigned_to_id == u.id %}selected{% endif %}>{{ u.name }}</option>{% endfor %}
+                </select>
+                {% if current_user.is_learning_expert() %}
+                <button type="submit" class="btn btn-primary btn-sm py-0 px-1" style="font-size:0.65rem;"><i class="bi bi-check"></i></button>
+                {% endif %}
+            </form>
+            {% if current_user.is_learning_expert() %}
+            <form method="POST" action="{{ url_for('delete_request', req_id=req.id) }}" style="display:inline;" onsubmit="return confirm('Delete "{{ req.title }}"? This will permanently remove all associated data.')">
+                <button class="btn btn-outline-danger btn-sm py-0 px-1" style="font-size:0.7rem;" onclick="event.stopPropagation();"><i class="bi bi-trash"></i> Delete</button>
+            </form>
+            {% endif %}
+            <a href="{{ url_for('request_analytics', req_id=req.id) }}" class="btn btn-outline-info btn-sm py-0 px-1" style="font-size:0.65rem;" onclick="event.stopPropagation();"><i class="bi bi-graph-up"></i> Analytics</a>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card"><div class="card-body text-center py-4" style="color:#999;">No requests found</div></div>
+{% endfor %}
+{% endblock %}

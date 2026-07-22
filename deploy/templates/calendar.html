@@ -1,0 +1,199 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-calendar-event"></i> Training Calendar & Resource View</h4>
+<p style="color:#666;font-size:0.85rem;">
+    <span class="phase-badge" style="background:var(--accent);color:#fff;">🔵 Planned</span>
+    <span class="phase-badge" style="background:var(--red);color:#fff;">🔴 Ad Hoc</span>
+    <span class="phase-badge" style="background:var(--green);color:#fff;">🟢 Delivery</span>
+    — Colours show event type. Calendar shows training events and resource allocation in one view.
+</p>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <!-- Add Event Form -->
+        <div class="card"><div class="card-header"><i class="bi bi-plus"></i> Add Training or Resource Event</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('add_training_event') }}" class="row g-2">
+                    <div class="col-12"><input type="text" name="title" class="form-control form-control-sm" placeholder="Event / Activity title" required></div>
+                    <div class="col-6"><input type="date" name="start_date" class="form-control form-control-sm" required></div>
+                    <div class="col-6"><input type="date" name="end_date" class="form-control form-control-sm" required></div>
+                    <div class="col-6">
+                        <select name="request_id" class="form-select form-select-sm">
+                            <option value="">— Link to request —</option>
+                            <option value="0">📌 Standalone Intervention</option>
+                            {% for r in requests %}<option value="{{ r.id }}">{{ r.title[:40] }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <select name="trainer_id" class="form-select form-select-sm">
+                            <option value="">— Person assigned —</option>
+                            {% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <select name="event_type" class="form-select form-select-sm">
+                            <option value="planned">📋 Planned Training</option>
+                            <option value="adhoc">⚡ Ad Hoc Training</option>
+                            <option value="delivery">🎓 Training Delivery</option>
+                            <option value="resource">👤 Resource Allocation</option>
+                            <option value="milestone">🏁 Milestone</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <select name="colour" class="form-select form-select-sm">
+                            <option value="#2E86AB">🔵 Blue — Planned</option>
+                            <option value="#C0392B">🔴 Red — Ad Hoc</option>
+                            <option value="#1E8445">🟢 Green — Delivery</option>
+                            <option value="#E69E2E">🟡 Gold — Resource</option>
+                            <option value="#6C3483">🟣 Purple — Milestone</option>
+                        </select>
+                    </div>
+                    <div class="col-6"><input type="text" name="location" class="form-control form-control-sm" placeholder="Location"></div>
+                    <div class="col-6">
+                        <select name="status" class="form-select form-select-sm">
+                            <option value="Forecasted">Forecasted</option>
+                            <option value="Scheduled">Scheduled</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Cancelled">Cancelled</option>
+                        </select>
+                    </div>
+                    <div class="col-12"><input type="text" name="notes" class="form-control form-control-sm" placeholder="Notes / availability %"></div>
+                    <div class="col-12"><button class="btn btn-primary btn-sm w-100">Add Event</button></div>
+                </form>
+            </div>
+        </div>
+
+        <!-- LNA Cycles -->
+        <div class="card mt-3"><div class="card-header"><i class="bi bi-piggy-bank"></i> Active LNA Cycles</div>
+            <div class="card-body">
+                {% for c in cycles %}
+                <div class="d-flex justify-content-between p-2 mb-1" style="background:#F8F9FA;border-radius:4px;font-size:0.85rem;">
+                    <div><strong>{{ c.name }}</strong><br><small style="color:#999;">{{ c.start_date.strftime('%d %b') }} — {{ c.end_date.strftime('%d %b') }}</small></div>
+                    <span class="phase-badge" style="background:#E8F0F8;color:var(--accent);">{{ c.requests.count() }} req</span>
+                </div>
+                {% else %}<p style="font-size:0.85rem;color:#999;">No active cycles</p>{% endfor %}
+                <a href="{{ url_for('lna_cycles') }}" class="btn btn-outline-primary btn-sm w-100">Manage Cycles</a>
+            </div>
+        </div>
+
+        <!-- Forecast Summary -->
+        {% set fcast = forecasts %}
+        <div class="card mt-3"><div class="card-header"><i class="bi bi-bar-chart-steps"></i> Resource Summary (Forecasted)</div>
+            <div class="card-body" style="font-size:0.85rem;">
+                {% set user_stats = {} %}
+                {% for f in fcast %}
+                {% set name = f.user.name if f.user else 'Unknown' %}
+                {% if name not in user_stats %}{% set _ = user_stats.update({name: {'avail':0,'alloc':0,'count':0}}) %}{% endif %}
+                {% set _ = user_stats[name].update({'avail': user_stats[name].avail + f.availability_pct, 'alloc': user_stats[name].alloc + f.allocated_pct, 'count': user_stats[name].count + 1}) %}
+                {% endfor %}
+                {% for name, data in user_stats.items() %}
+                <div class="mb-2"><strong>{{ name }}</strong>
+                    <div class="progress" style="height:12px;">
+                        <div class="progress-bar" style="width:{{ data.avail/data.count }}%;background:var(--accent);" title="Avg Availability"></div>
+                    </div>
+                    <small style="color:#999;">Avg {{ '%.0f'|format(data.avail/data.count) }}% avail / {{ '%.0f'|format(data.alloc/data.count) }}% allocated</small>
+                </div>
+                {% else %}<p style="font-size:0.8rem;color:#999;">Add events with type 'Resource' to see summary</p>{% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- Calendar Grid -->
+        <div class="card"><div class="card-header"><i class="bi bi-calendar"></i> Calendar — {{ month_names[cal_month] }} {{ cal_year }}</div>
+            <div class="card-body p-2">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <a href="?month={{ prev_month }}&year={{ prev_year }}" class="btn btn-outline-secondary btn-sm">‹ Prev</a>
+                    <span style="font-weight:600;font-size:1.1rem;">{{ month_names[cal_month] }} {{ cal_year }}</span>
+                    <a href="?month={{ next_month }}&year={{ next_year }}" class="btn btn-outline-secondary btn-sm">Next ›</a>
+                </div>
+                <table class="table table-bordered" style="font-size:0.8rem;">
+                    <thead><tr>
+                        {% for d in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+                        <th class="text-center p-1" style="background:var(--navy);color:#fff;font-weight:600;">{{ d }}</th>
+                        {% endfor %}
+                    </tr></thead>
+                    <tbody>
+                        {% set day = namespace(d=1) %}
+                        {% set start_dow = first_day_of_month %}
+                        {% for week_row in range(6) %}
+                        {% if day.d <= cal_days %}
+                        <tr>
+                            {% for dow in range(7) %}
+                            {% if (week_row == 0 and dow < start_dow) or day.d > cal_days %}
+                            <td style="height:90px;width:14%;background:#f8f9fa;vertical-align:top;padding:2px;"></td>
+                            {% else %}
+                            <td style="height:90px;width:14%;vertical-align:top;padding:2px;{% if day.d == today_day and cal_month == today_month and cal_year == today_year %}background:#FFF8E1;{% endif %}">
+                                <div style="font-weight:700;font-size:0.75rem;color:var(--navy);margin-bottom:2px;">{{ day.d }}</div>
+                                <div style="overflow-y:auto;max-height:72px;">
+                                {% for e in events %}
+                                {% if e.start_date.month == cal_month and e.start_date.year == cal_year and e.start_date.day <= day.d and e.end_date.day >= day.d %}
+                                <div style="background:{{ e.colour or '#2E86AB' }};color:#fff;border-radius:3px;padding:1px 3px;font-size:0.6rem;margin-bottom:1px;cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;" title="{% if e.event_type == 'activity' %}📌 {% endif %}{{ e.title }}{% if e.trainer %} — {{ e.trainer.name }}{% endif %}
+{% if e.event_type == 'activity' %}Phase: {{ e.notes }}
+{% endif %}
+{{ e.start_date.strftime('%d %b %Y') }} → {{ e.end_date.strftime('%d %b %Y') }}
+{% if e.notes and e.event_type != 'activity' %}{{ e.notes }}{% endif %}">
+                                    {{ e.title[:18] }}{% if e.trainer %}<br><small>{{ e.trainer.name[:12] }}</small>{% endif %}
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                                </div>
+                            </td>
+                            {% set day.d = day.d + 1 %}
+                            {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Events List (historical + upcoming) -->
+        <div class="card mt-3"><div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi bi-list"></i> All Events — Timeline</span>
+            <span style="font-size:0.75rem;color:#999;">
+                <span class="phase-badge" style="background:var(--accent);color:#fff;">Planned</span>
+                <span class="phase-badge" style="background:var(--red);color:#fff;">Ad Hoc</span>
+                <span class="phase-badge" style="background:var(--green);color:#fff;">Delivery</span>
+                <span class="phase-badge" style="background:#E69E2E;color:#fff;">Resource</span>
+                <span class="phase-badge" style="background:#6C3483;color:#fff;">Activity</span>
+                <span class="phase-badge" style="background:#6C3483;color:#fff;">Milestone</span>
+            </span>
+        </div>
+            <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+                {% set current_month = None %}
+                {% for e in events %}
+                {% set m = e.start_date.strftime('%B %Y') %}
+                {% if m != current_month %}
+                {% set current_month = m %}
+                <div style="padding:6px 12px;background:#E8F0F8;font-weight:700;font-size:0.85rem;color:var(--navy);border-bottom:1px solid #ddd;">{{ m }}</div>
+                {% endif %}
+                <div class="p-2" style="border-bottom:1px solid #eee;border-left:4px solid {{ e.colour or '#2E86AB' }};font-size:0.85rem;">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong>{{ e.title }}</strong>
+                            <span class="phase-badge ms-1" style="background:{{ e.colour or '#2E86AB' }};color:#fff;font-size:0.65rem;">{{ e.event_type|title }}</span>
+                            <span class="phase-badge ms-1" style="background:#f0f0f0;color:#666;font-size:0.65rem;">{{ e.status }}</span>
+                            <div style="font-size:0.75rem;color:#666;margin-top:1px;">
+                                {{ e.start_date.strftime('%d %b') }} — {{ e.end_date.strftime('%d %b') }}
+                                {% if e.trainer %} · <i class="bi bi-person"></i> {{ e.trainer.name }}{% endif %}
+                                {% if e.location %} · <i class="bi bi-geo-alt"></i> {{ e.location }}{% endif %}
+                                {% if e.request %} · <a href="{{ url_for('request_detail', req_id=e.request_id) }}">{{ e.request.title[:30] }}</a>{% endif %}
+                                {% if e.notes %} · {{ e.notes }}{% endif %}
+                            </div>
+                        </div>
+                        <form method="POST" action="{{ url_for('delete_training_event', eid=e.id) }}" onsubmit="return confirm('Delete this event?')">
+                            <button class="btn btn-outline-danger btn-sm py-0 px-1"><i class="bi bi-x"></i></button>
+                        </form>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-5" style="color:#999;">No events yet. Add one from the left panel.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,112 @@
+{% extends "base.html" %}{% block content %}
+<h4 style="color:var(--navy);font-weight:700;"><i class="bi bi-kanban"></i> Kanban — Learning Team Workload</h4>
+<p style="color:#666;font-size:0.85rem;">Drag and drop between phases to update status. Allocate resources and track inferred vs actual completion dates.</p>
+
+<div class="row g-2" style="overflow-x:auto;flex-wrap:nowrap;min-width:100%;">
+    {% set columns = [
+        ('inbox', '📥 Inbox', inbox, 'var(--navy)'),
+        ('analysis', '🔍 Analysis', analysis, 'var(--accent)'),
+        ('design', '✏️ Design', design, 'var(--teal)'),
+        ('development', '⚙️ Development', development, 'var(--gold)'),
+        ('implementation', '🚀 Implementation', implementation, 'var(--green)'),
+        ('evaluation', '📊 Evaluation', evaluation, '#6F42C1'),
+        ('completed', '✅ Completed', completed, '#1E8445'),
+    ] %}
+    {% for key, label, items, color in columns %}
+    <div class="col" style="min-width:220px;max-width:260px;">
+        <div class="card">
+            <div class="card-header py-2" style="border-bottom:3px solid {{ color }};">
+                <span style="font-size:0.85rem;">{{ label }}</span>
+                <span class="phase-badge float-end" style="background:{{ color }};color:#fff;">{{ items|length }}</span>
+            </div>
+            <div class="card-body p-2" style="min-height:300px;background:#F8F9FA;">
+                {% for req in items %}
+                <div class="p-2 mb-1" style="background:#fff;border-radius:6px;border-left:3px solid {{ color }};font-size:0.8rem;cursor:pointer;" onclick="window.location='{{ url_for('request_detail', req_id=req.id) }}'">
+                    <strong>{{ req.title[:35] }}</strong>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                        <span class="phase-badge" style="background:{% if req.priority=='Critical' %}#FDEDEC;color:#C0392B{% elif req.priority=='High' %}#FDEBD0;color:#CC7A29{% elif req.priority=='Medium' %}#E8F0F8;color:#2E86AB{% else %}#f0f0f0;color:#666{% endif %};font-size:0.65rem;">{{ req.priority }}</span>
+                        <span class="phase-badge" style="background:{% if req.request_type=='adhoc' %}#FDEDEC;color:var(--red){% else %}#E8F0F8;color:var(--accent){% endif %};font-size:0.65rem;">{% if req.request_type=='adhoc' %}⚡{% else %}📋{% endif %} {{ req.request_type|title }}</span>
+                    </div>
+                    {% if req.assigned_to %}<div style="font-size:0.7rem;color:#999;margin-top:2px;"><i class="bi bi-person"></i> {{ req.assigned_to.name }}</div>{% endif %}
+                    {% set alloc = allocations|selectattr('request_id','equalto',req.id)|first %}
+                    {% if alloc %}
+                    <div style="font-size:0.7rem;color:var(--accent);margin-top:2px;">
+                        <i class="bi bi-calendar-check"></i> Est: {{ alloc.inferred_completion.strftime('%d %b') if alloc.inferred_completion else '—' }}
+                        {% if alloc.status == 'Complete' %}<span class="phase-badge" style="background:#E8F5E9;color:#1E8445;font-size:0.6rem;">✓</span>{% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div class="text-center py-4" style="color:#999;font-size:0.8rem;">No items</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Resource Allocation Panel -->
+<div class="card mt-3"><div class="card-header"><i class="bi bi-people"></i> Allocate Resources</div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <form method="POST" action="{{ url_for('allocate_resource') }}" class="row g-2">
+                    <div class="col-md-5">
+                        <select name="request_id" class="form-select form-select-sm" required>
+                            <option value="">— Select Request —</option>
+                            {% for r in inbox %}<option value="{{ r.id }}">📥 {{ r.title[:50] }}</option>{% endfor %}
+                            {% for r in analysis %}<option value="{{ r.id }}">🔍 {{ r.title[:50] }}</option>{% endfor %}
+                            {% for r in design %}<option value="{{ r.id }}">✏️ {{ r.title[:50] }}</option>{% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select name="user_id" class="form-select form-select-sm" required>
+                            <option value="">— Assign to —</option>
+                            {% for u in users %}
+                            <option value="{{ u.id }}">{{ u.name }} ({{ u.role }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="date" name="inferred_completion" class="form-control form-control-sm" placeholder="Est. completion">
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-primary btn-sm w-100">Allocate</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="col-md-6">
+                <div class="table-responsive">
+                    <table class="table table-sm" style="font-size:0.8rem;">
+                        <thead><tr><th>Request</th><th>Person</th><th>Est. Completion</th><th>Actual</th><th>Status</th><th></th></tr></thead>
+                        <tbody>
+                            {% for a in allocations %}
+                            <tr>
+                                <td><a href="{{ url_for('request_detail', req_id=a.request_id) }}">{{ a.request.title[:30] }}</a></td>
+                                <td>{{ a.user.name if a.user else '—' }}</td>
+                                <td>
+                                    <form method="POST" action="{{ url_for('update_completion', aid=a.id) }}" class="d-flex gap-1">
+                                        <input type="date" name="inferred_completion" class="form-control form-control-sm" value="{{ a.inferred_completion.strftime('%Y-%m-%d') if a.inferred_completion else '' }}" style="width:120px;">
+                                        <button class="btn btn-outline-primary btn-sm"><i class="bi bi-check"></i></button>
+                                    </form>
+                                </td>
+                                <td>{{ a.actual_completion.strftime('%d %b') if a.actual_completion else '—' }}</td>
+                                <td><span class="phase-badge" style="background:{% if a.status=='Complete' %}#E8F5E9;color:#1E8445{% else %}#FDEBD0;color:#CC7A29{% endif %};">{{ a.status }}</span></td>
+                                <td>
+                                    {% if a.status != 'Complete' %}
+                                    <form method="POST" action="{{ url_for('complete_allocation', aid=a.id) }}">
+                                        <button class="btn btn-success btn-sm"><i class="bi bi-check"></i></button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}<tr><td colspan="6" class="text-center" style="color:#999;">No allocations yet</td></tr>{% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
