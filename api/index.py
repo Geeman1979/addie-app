@@ -1,12 +1,15 @@
 import sys
 import os
 
-# Add parent directory to path so we can import app
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Ensure the project root is on the path
+_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
+# Change to root directory so relative paths work
+os.chdir(_root)
 
 from app import create_app
 
 flask_app = create_app()
-
-# Vercel expects a WSGI app
 app = flask_app
